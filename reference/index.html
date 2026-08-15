@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>CEDIBOARD — Ghana's numbers, clearly told · A Finex Insights publication</title>
+<!--
+  ==========================================================================
+  CEDIBOARD — interactive flip newspaper (Ivory Charcoal design system)
+  Pages are a 3:4 design grid (810 × 1080). Desktop shows a two-page
+  spread with real 3D sheet flips; narrow screens fall back to a
+  single-page fold-turn. All figures marked SAMPLE are illustrative.
+  ==========================================================================
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1a1814; --muted:#6a6458; --ivory:#f5f3ee; --paper:#fbfaf6;
+    --gold:#c8960c; --emerald:#3BA874; --coral:#E05040;
+    --track:#e4e1d8; --barsc:#cdc9bf;
+    --flag-r:#CE1126; --flag-y:#FCD116; --flag-g:#006B3F;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    font-family:"Google Sans Flex","Google Sans","Segoe UI",Roboto,Arial,sans-serif;
+    background:
+      radial-gradient(1200px 700px at 50% 30%, #46423a 0%, #2e2b25 55%, #201e1a 100%);
+    color:var(--ivory);
+    overflow:hidden;
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  /* ============ STAGE / BOOK GEOMETRY ============ */
+  #stage{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+  #scaler{ position:relative; }
+  #book{
+    position:relative; transform-style:preserve-3d; perspective:2800px;
+    transition:transform 1.7s cubic-bezier(.42,.03,.18,1);
+  }
+  #book.mode-spread{ width:1620px; height:1080px; }
+  #book.mode-single{ width:810px;  height:1080px; }
+
+  /* stacked paper edges */
+  .edge{ position:absolute; top:10px; bottom:10px; z-index:1;
+         background:repeating-linear-gradient(90deg,#efede6 0 1.5px,#d6d2c6 1.5px 3px);
+         border-radius:2px; box-shadow:0 18px 40px rgba(0,0,0,.45); }
+  #edgeL{ right:calc(100% - 1px); } #edgeR{ left:calc(100% - 1px); }
+
+  /* sheets (spread mode) */
+  .sheet{
+    position:absolute; left:50%; top:0; width:810px; height:1080px;
+    transform-origin:left center; transform-style:preserve-3d;
+    transform:rotateY(0deg);
+    /* slow start, long graceful settle — like paper falling into place */
+    transition:transform 1.7s cubic-bezier(.42,.03,.18,1);
+  }
+  .sheet.flipped{ transform:rotateY(-180deg); }
+  .sheet.turning{ z-index:600 !important; }
+  .sheet.peek{ transform:rotateY(-7deg); transition-duration:.8s; }
+  .sheet.flipped.peek{ transform:rotateY(-173deg); }
+  .face{
+    position:absolute; inset:0; overflow:hidden;
+    backface-visibility:hidden; -webkit-backface-visibility:hidden;
+    background:var(--ivory);
+    box-shadow:0 24px 60px rgba(0,0,0,.35);
+  }
+  .face.back{ transform:rotateY(180deg); }
+  /* spine + turn shading */
+  .face::before{ content:""; position:absolute; inset:0; pointer-events:none; z-index:40; }
+  .face.front::before{ background:linear-gradient(90deg, rgba(26,24,20,.16) 0, rgba(26,24,20,0) 7%); }
+  .face.back::before{  background:linear-gradient(270deg, rgba(26,24,20,.16) 0, rgba(26,24,20,0) 7%); }
+  .face::after{ content:""; position:absolute; inset:0; pointer-events:none; z-index:41;
+                background:linear-gradient(90deg, rgba(26,24,20,.28), rgba(26,24,20,0) 55%);
+                opacity:0; transition:opacity .85s ease; }
+  .sheet.turning .face::after{ opacity:.45; }
+
+  /* single mode pages */
+  #book.mode-single .page{
+    position:absolute; inset:0; box-shadow:0 24px 60px rgba(0,0,0,.35);
+    transform-origin:left center;
+  }
+
+  /* ============ PAGE (810 × 1080 grid) ============ */
+  .page{
+    width:810px; height:1080px; background:var(--ivory); color:var(--ink);
+    position:relative; display:flex; flex-direction:column; overflow:hidden;
+    user-select:none;
+  }
+  .page.dark{ background:#1a1814; color:var(--ivory); }
+
+  /* shared chrome */
+  .hd{ display:flex; justify-content:space-between; align-items:flex-start;
+       padding:40px 48px 0 48px; }
+  .eyebrow{ font-size:15px; letter-spacing:4.5px; font-weight:600; color:var(--muted);
+            text-transform:uppercase; padding-top:4px; }
+  .eyebrow b{ color:var(--gold); font-weight:700; }
+  .wordmark{ text-align:right; }
+  .wordmark .f1{ font-size:18px; font-weight:700; letter-spacing:3px; }
+  .wordmark .f1 span{ color:var(--gold); }
+  .wordmark .f2{ font-size:10px; letter-spacing:2.4px; color:var(--muted); margin-top:2px; }
+  .page.dark .eyebrow{ color:#a49d8e; }
+  .page.dark .wordmark .f2{ color:#a49d8e; }
+
+  .ft{ margin-top:auto; padding:0 48px 32px 48px; }
+  .src{ font-size:12.5px; color:var(--muted); padding-bottom:12px; line-height:1.45; }
+  .page.dark .src{ color:#a49d8e; }
+  .ftrow{ display:flex; justify-content:space-between; align-items:center;
+          border-top:3px solid currentColor; padding-top:15px; }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .flag{ width:40px; height:27px; display:flex; flex-direction:column; position:relative;
+         border-radius:2px; overflow:hidden; flex:none; }
+  .flag div{ flex:1; } .fr{background:var(--flag-r);} .fy{background:var(--flag-y);} .fg{background:var(--flag-g);}
+  .flag .star{ position:absolute; left:50%; top:50%; transform:translate(-50%,-54%);
+               font-size:14px; color:var(--ink); }
+  .handles{ font-size:13.5px; font-weight:600; }
+  .handles span{ color:var(--muted); font-weight:500; }
+  .page.dark .handles span{ color:#a49d8e; }
+  .folio{ font-size:13.5px; color:var(--muted); font-weight:600; letter-spacing:1px; }
+  .page.dark .folio{ color:#a49d8e; }
+
+  .sample{ display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:2px;
+           color:var(--gold); border:1.5px solid var(--gold); border-radius:20px;
+           padding:3px 10px; vertical-align:middle; }
+
+  .adslot{ margin:18px 48px 0; border:2px dashed var(--gold); border-radius:14px;
+           padding:13px 20px 14px; text-align:center; background:rgba(200,150,12,.06); }
+  .adslot .k{ font-size:10px; letter-spacing:3px; color:var(--muted); font-weight:800; }
+  .adslot b{ display:block; font-size:17px; font-weight:800; margin-top:3px; }
+  .adslot span{ display:block; font-size:12.5px; color:var(--muted); font-weight:600; margin-top:2px; }
+  .adslot span i{ font-style:normal; color:var(--gold); font-weight:800; }
+  .adslot a{ color:var(--gold); font-weight:800; text-decoration:none; }
+  .adslot a:hover{ text-decoration:underline; }
+  .page.dark .adslot .k, .page.dark .adslot span{ color:#a49d8e; }
+
+  .pos{ color:var(--coral); } .neg{ color:var(--emerald); } .flat{ color:var(--gold); }
+
+  /* ---------- COVER ---------- */
+  .cv-rules{ margin:22px 48px 0; border-top:3.5px solid var(--ink); border-bottom:1.5px solid var(--ink); height:8px; }
+  .cv-mast{ text-align:center; padding:20px 40px 0; }
+  .cv-title{ font-size:80px; font-weight:800; letter-spacing:2px; line-height:1; margin-top:6px; }
+  .cv-title span{ color:var(--gold); }
+  .cv-tag{ font-size:16.5px; color:var(--muted); margin-top:9px; letter-spacing:.3px; }
+  .cv-date{ display:flex; justify-content:center; gap:14px; margin:16px 48px 0; padding:10px 0;
+            border-top:1.5px solid var(--ink); border-bottom:3.5px solid var(--ink);
+            font-size:13.5px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; }
+  .cv-date i{ font-style:normal; color:var(--gold); }
+  .cv-lead{ display:flex; gap:18px; margin:18px 48px 0; background:var(--paper);
+            border:1.5px solid var(--track); border-radius:14px; padding:14px; cursor:pointer;
+            align-items:center; }
+  .cv-lead img{ width:285px; height:148px; object-fit:contain; background:#fff; border-radius:10px;
+                border:1px solid var(--track); flex:none; }
+  .cv-lead .k{ font-size:11.5px; letter-spacing:3px; color:var(--gold); font-weight:800; }
+  .cv-lead h2{ font-size:26px; font-weight:800; line-height:1.14; margin-top:7px; transition:color .15s; }
+  .cv-lead:hover h2{ color:var(--gold); }
+  .cv-lead p{ font-size:13.5px; color:var(--muted); line-height:1.45; margin-top:8px; }
+  .cv-lead p b{ color:var(--ink); font-weight:800; }
+  .cv-glance{ display:flex; margin:14px 48px 0; background:#1a1814; color:var(--ivory);
+              border-radius:12px; padding:13px 26px; justify-content:space-between; align-items:center; }
+  .cv-glance .g{ display:flex; align-items:baseline; gap:9px; }
+  .cv-glance .g span{ font-size:11px; letter-spacing:2px; color:#a49d8e; font-weight:700; }
+  .cv-glance .g b{ font-size:21px; font-weight:800; }
+  .cv-glance .g i{ font-style:normal; font-size:11.5px; font-weight:700; }
+  .cv-toc{ margin:18px 48px 0; }
+  .cv-toc h3{ font-size:14px; letter-spacing:4px; color:var(--muted); font-weight:700; margin-bottom:10px; }
+  .toc-row{ display:flex; align-items:baseline; gap:12px; padding:6px 4px; cursor:pointer;
+            border-bottom:1px solid var(--track); }
+  .toc-row:hover .t{ color:var(--gold); }
+  .toc-row .n{ font-size:13.5px; font-weight:700; color:var(--gold); width:26px; flex:none; }
+  .toc-row .t{ font-size:16.5px; font-weight:700; transition:color .15s; }
+  .toc-row .sub{ font-size:14px; color:var(--muted); }
+  .toc-row .lead{ flex:1; border-bottom:2px dotted var(--barsc); transform:translateY(-4px); }
+
+  /* ---------- HEADLINES ---------- */
+  .hl-title{ text-align:center; padding:18px 48px 0; }
+  .hl-title h1{ font-size:34px; font-weight:800; line-height:1.25; }
+  .hl-title .sub{ font-size:15px; color:var(--muted); margin-top:6px; }
+  .hl-grid{ display:grid; grid-template-columns:1fr 1fr; grid-auto-rows:1fr; gap:14px;
+            margin:18px 48px 0; flex:1; min-height:0; }
+  .story{ background:var(--paper); border:1.5px solid var(--track); border-radius:14px;
+          padding:13px 14px 12px; display:flex; flex-direction:column; gap:9px;
+          justify-content:flex-start; min-height:0; }
+  .story .top{ display:flex; gap:10px; align-items:center; flex:none; }
+  .story .chip{ width:40px; height:40px; border-radius:10px; flex:none; display:flex;
+                align-items:center; justify-content:center; font-size:20px; }
+  .story h2{ font-size:16.5px; font-weight:800; line-height:1.18; }
+  .story .pic{ flex:1; min-height:90px; width:100%; object-fit:cover; border-radius:9px;
+               border:1px solid var(--track); }
+  .story p{ font-size:12.5px; color:var(--muted); line-height:1.42; flex:none;
+            display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+
+  /* ---------- FX PAGES ---------- */
+  .fx-date{ align-self:center; margin-top:16px; border:2px solid var(--ink); border-radius:26px;
+            padding:6px 22px; font-size:13.5px; font-weight:700; letter-spacing:3px; }
+  .fx-title{ text-align:center; font-size:62px; font-weight:800; letter-spacing:-1px; margin-top:10px; }
+  .fx-title .arr{ color:var(--gold); font-weight:700; }
+  .fx-rule{ width:300px; height:5px; background:var(--gold); margin:12px auto 0; border-radius:3px; }
+  .fx-sub{ text-align:center; font-size:16px; color:var(--muted); font-weight:600; margin-top:12px; }
+  .fx-leg{ display:flex; justify-content:center; gap:26px; margin-top:10px; font-size:14px;
+           color:var(--muted); font-weight:600; }
+  .fx-leg b{ font-weight:700; }
+  .fx-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:20px 48px 0; }
+  .fxc{ background:var(--paper); border-radius:13px; box-shadow:0 3px 10px rgba(26,24,20,.07);
+        border:1px solid var(--track); overflow:hidden; text-align:center; padding-bottom:15px; }
+  .fxc .tab{ height:17px; background:var(--gold); display:flex; justify-content:space-between;
+             padding:0 26px; align-items:center; margin-bottom:13px; }
+  .fxc .slot{ width:26px; height:6px; background:var(--ivory); border-radius:3px; }
+  .fxc h3{ font-size:17px; font-weight:800; min-height:40px; display:flex; align-items:center;
+           justify-content:center; padding:0 8px; line-height:1.15; }
+  .fxc .rate{ font-size:37px; font-weight:800; letter-spacing:-1px; margin-top:8px; }
+  .fxc .rate .tri{ font-size:19px; vertical-align:3px; margin-right:5px; }
+  .fxc .rate .cur{ font-size:22px; font-weight:700; color:var(--muted); margin-right:2px; }
+  .fxc .lbl{ font-size:13px; color:var(--muted); font-weight:600; margin-top:7px; }
+  .fxc .chg{ font-size:13px; font-weight:700; margin-top:3px; }
+
+  /* ---------- FUEL ---------- */
+  .fuelc h3{ min-height:28px; }
+  .fuelc .fl2{ display:flex; align-items:stretch; margin-top:5px; padding:0 10px; }
+  .fuelc .fl2>div{ flex:1; }
+  .fuelc .fl2 .sep{ flex:none; width:1.5px; background:var(--track); margin:4px 0; }
+  .fuelc .fl2 span{ display:block; font-size:10px; letter-spacing:1.5px; color:var(--muted); font-weight:800; }
+  .fuelc .fl2 b{ display:block; font-size:23px; font-weight:800; margin-top:3px; letter-spacing:-.5px; }
+  .fuelc .fl2 b .cur{ font-size:13px; color:var(--muted); font-weight:700; }
+  .fuelc .fl2 i{ font-style:normal; display:block; font-size:11px; font-weight:800; margin-top:2px; }
+
+  /* ---------- FULL-PAGE SPONSORSHIP ---------- */
+  .fp-ad{ flex:1; margin:24px 48px 0; border:3px dashed var(--gold); border-radius:20px;
+          background:rgba(200,150,12,.05); display:flex; flex-direction:column; align-items:center;
+          justify-content:center; text-align:center; padding:40px; }
+  .fp-ad .k{ font-size:13px; letter-spacing:4px; color:var(--muted); font-weight:800; }
+  .fp-ad .big{ font-size:62px; font-weight:800; line-height:1.05; margin-top:18px; }
+  .fp-ad p{ font-size:16px; color:var(--muted); max-width:440px; line-height:1.55; margin-top:18px; }
+  .fp-ad .cta{ display:flex; gap:14px; margin-top:30px; }
+  .fp-ad .cta a{ display:inline-block; border-radius:30px; padding:13px 26px; font-size:15px;
+                 font-weight:800; text-decoration:none; }
+  .fp-ad .cta a.call{ background:var(--ink); color:var(--ivory); }
+  .fp-ad .cta a.wa{ border:2.5px solid var(--gold); color:var(--gold); }
+  .fp-ad .cta a:hover{ opacity:.85; }
+
+  /* ---------- GSE ---------- */
+  .gse-date{ padding:14px 48px 0; font-size:19px; font-weight:800; }
+  .gse-date span{ font-size:14px; color:var(--muted); font-weight:600; margin-left:8px; }
+  .gse-idx{ display:flex; gap:4px; margin:14px 48px 0; }
+  .gse-idx .panel{ flex:1; background:#1a1814; color:var(--ivory); padding:20px 24px 18px; }
+  .gse-idx .panel:first-child{ border-radius:14px 0 0 14px; background:#12100d; }
+  .gse-idx .panel:last-child{ border-radius:0 14px 14px 0; }
+  .panel .k{ font-size:12px; letter-spacing:3px; color:#a49d8e; font-weight:700; }
+  .panel .v{ font-size:44px; font-weight:800; letter-spacing:-1px; margin-top:6px; }
+  .panel .pts{ font-size:12.5px; color:#a49d8e; margin-top:3px; }
+  .panel .row{ display:flex; justify-content:space-between; align-items:flex-end; margin-top:10px; }
+  .pill{ display:inline-block; background:var(--gold); color:#1a1814; font-size:12.5px;
+         font-weight:800; border-radius:18px; padding:4px 12px; }
+  .panel .ytd{ text-align:right; font-size:12px; color:#a49d8e; }
+  .panel .ytd b{ display:block; font-size:16px; color:var(--gold); }
+  .gse-kpis{ display:flex; gap:22px; margin:20px 48px 0; }
+  .kpi{ flex:1; border-top:4px solid var(--ink); padding-top:10px; }
+  .kpi .k{ font-size:12px; letter-spacing:2.5px; color:var(--muted); font-weight:700; text-transform:uppercase; }
+  .kpi .v{ font-size:27px; font-weight:800; margin-top:3px; letter-spacing:-.5px; }
+  .kpi .d{ font-size:12.5px; margin-top:2px; color:var(--muted); font-weight:600; }
+  .gse-movers{ display:flex; gap:34px; margin:22px 48px 0; }
+  .mv{ flex:1; }
+  .mv h3{ font-size:13px; letter-spacing:3px; font-weight:800; padding-bottom:8px; }
+  .mv.g h3{ color:var(--gold); border-bottom:3px solid var(--gold); }
+  .mv.l h3{ color:var(--coral); border-bottom:3px solid var(--coral); }
+  .mv .r{ display:flex; justify-content:space-between; padding:9px 2px; font-size:15.5px;
+          border-bottom:1px solid var(--track); align-items:baseline; }
+  .mv .r b{ font-weight:800; }
+  .mv .r .p{ color:var(--muted); font-size:13.5px; margin-left:auto; margin-right:14px; }
+  .mv .r .c{ font-weight:800; font-size:15px; }
+  .gse-tr{ margin:24px 48px 0; }
+  .gse-tr h3{ font-size:13px; letter-spacing:3px; color:var(--muted); font-weight:800; margin-bottom:12px; }
+  .tr-row{ display:flex; align-items:center; gap:12px; margin-bottom:9px; }
+  .tr-row .n{ width:64px; font-size:14px; font-weight:800; }
+  .tr-row .track{ flex:1; height:15px; background:var(--track); border-radius:8px; overflow:hidden; }
+  .tr-row .bar{ height:100%; border-radius:8px; background:var(--barsc); }
+  .tr-row.top .bar{ background:var(--gold); } .tr-row.top .n{ color:var(--gold); }
+  .tr-row .v{ width:78px; text-align:right; font-size:13px; font-weight:700; color:var(--muted); }
+  .tr-row.top .v{ color:var(--ink); }
+  .finexview{ margin:22px 48px 0; background:#1a1814; color:var(--ivory); border-radius:14px;
+              padding:18px 24px; }
+  .finexview h3{ font-size:12px; letter-spacing:3px; color:var(--gold); font-weight:800; margin-bottom:8px; }
+  .finexview p{ font-size:14.5px; line-height:1.55; }
+  .finexview b{ color:var(--gold); font-weight:700; }
+
+  /* ---------- SPORTS ---------- */
+  .sp-match{ margin:20px 48px 0; background:#1a1814; color:var(--ivory); border-radius:16px;
+             padding:22px 28px; position:relative; overflow:hidden; }
+  .sp-match .k{ font-size:12px; letter-spacing:3px; color:var(--gold); font-weight:800; }
+  .sp-vs{ display:flex; align-items:center; justify-content:space-between; margin-top:14px; }
+  .sp-team{ text-align:center; width:200px; }
+  .sp-team .crest{ width:64px; height:64px; margin:0 auto; border-radius:50%; display:flex;
+                   align-items:center; justify-content:center; font-size:30px; }
+  .sp-team h4{ font-size:19px; font-weight:800; margin-top:8px; }
+  .sp-team .form{ display:flex; gap:5px; justify-content:center; margin-top:7px; }
+  .sp-team .form i{ width:11px; height:11px; border-radius:50%; font-style:normal; }
+  .f-w{ background:var(--emerald);} .f-d{ background:var(--gold);} .f-l{ background:var(--coral);}
+  .sp-mid{ text-align:center; }
+  .sp-mid .vs{ font-size:30px; font-weight:800; color:var(--gold); }
+  .sp-mid .when{ font-size:12.5px; color:#a49d8e; margin-top:5px; line-height:1.5; }
+  .sp-note{ margin-top:16px; border-top:1px solid #3a362e; padding-top:12px; font-size:13.5px;
+            color:#cfcabd; line-height:1.5; }
+  .sp-note b{ color:var(--gold); }
+  .sp-sec{ margin:24px 48px 0; }
+  .sp-sec h3{ font-size:13px; letter-spacing:3px; color:var(--muted); font-weight:800;
+              border-bottom:3px solid var(--ink); padding-bottom:8px; margin-bottom:4px;
+              display:flex; justify-content:space-between; align-items:center; }
+  .lg-row{ display:flex; align-items:center; gap:12px; padding:8.5px 2px; border-bottom:1px solid var(--track);
+           font-size:15px; }
+  .lg-row .pos-n{ width:22px; color:var(--muted); font-weight:700; font-size:13.5px; }
+  .lg-row b{ width:186px; font-weight:800; }
+  .lg-row .track{ flex:1; height:11px; background:var(--track); border-radius:6px; overflow:hidden; }
+  .lg-row .bar{ height:100%; background:var(--barsc); border-radius:6px; }
+  .lg-row.top .bar{ background:var(--emerald); }
+  .lg-row .pts-v{ width:58px; text-align:right; font-weight:800; font-size:14.5px; }
+  .ab-row{ display:flex; align-items:center; gap:14px; padding:11px 2px; border-bottom:1px solid var(--track); }
+  .ab-row .chip{ width:40px; height:40px; border-radius:10px; background:var(--track); display:flex;
+                 align-items:center; justify-content:center; font-size:19px; flex:none; }
+  .ab-row .who b{ font-size:15.5px; font-weight:800; display:block; }
+  .ab-row .who span{ font-size:12.5px; color:var(--muted); }
+  .ab-row .stat{ margin-left:auto; font-size:14px; font-weight:800; text-align:right; }
+  .ab-row .stat span{ display:block; font-size:11.5px; color:var(--muted); font-weight:600; }
+
+  /* ---------- STREET PRICES ---------- */
+  .stp-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:15px; margin:20px 48px 0; }
+  .stp{ background:var(--paper); border:1.5px solid var(--track); border-radius:13px;
+        padding:16px 14px 14px; text-align:center; }
+  .stp .em{ font-size:30px; }
+  .stp h3{ font-size:14.5px; font-weight:800; margin-top:7px; min-height:34px; display:flex;
+           align-items:center; justify-content:center; line-height:1.15; }
+  .stp .pr{ font-size:29px; font-weight:800; letter-spacing:-.5px; margin-top:4px; }
+  .stp .pr .cur{ font-size:16px; color:var(--muted); font-weight:700; }
+  .stp .un{ font-size:12px; color:var(--muted); font-weight:600; margin-top:3px; }
+  .stp .chg{ font-size:12.5px; font-weight:800; margin-top:6px; }
+  .stp-note{ margin:18px 48px 0; background:var(--track); border-radius:11px; padding:13px 18px;
+             font-size:13.5px; color:var(--ink); line-height:1.5; }
+  .stp-note b{ font-weight:800; }
+
+  /* ---------- MACRO ---------- */
+  .mc-hero{ display:flex; align-items:flex-end; gap:30px; padding:44px 48px 0; }
+  .mc-hero .lab{ font-size:14px; letter-spacing:3px; color:var(--muted); font-weight:700;
+                 text-transform:uppercase; margin-bottom:8px; }
+  .mc-big{ font-size:170px; font-weight:800; line-height:.85; letter-spacing:-7px; }
+  .mc-big sup{ font-size:64px; font-weight:700; letter-spacing:0; }
+  .mc-meta{ padding-bottom:10px; }
+  .dirpill{ display:inline-flex; align-items:center; gap:8px; padding:8px 18px; border-radius:30px;
+            font-size:17px; font-weight:800; color:var(--ivory); }
+  .mc-line{ font-size:16px; margin-top:12px; max-width:300px; line-height:1.4; }
+  .mc-line b{ font-weight:800; }
+  .mc-trend{ padding:52px 48px 0; }
+  .seclabel{ font-size:12.5px; letter-spacing:3px; color:var(--muted); text-transform:uppercase;
+             font-weight:700; margin-bottom:12px; }
+  .mbars{ display:flex; align-items:flex-end; gap:9px; height:210px; border-bottom:3px solid var(--ink); }
+  .mcol{ flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%; }
+  .mcol .bv{ font-size:11.5px; font-weight:700; color:var(--muted); margin-bottom:4px; }
+  .mcol .bb{ width:100%; background:var(--barsc); border-radius:3px 3px 0 0; }
+  .mcol.cur .bb{ background:var(--gold); }
+  .mcol.cur .bv{ color:var(--ink); }
+  .mlabs{ display:flex; gap:9px; margin-top:7px; }
+  .mlabs span{ flex:1; text-align:center; font-size:10.5px; color:var(--muted); font-weight:700; }
+  .mlabs .cur{ color:var(--ink); }
+  .mc-split{ display:flex; gap:20px; padding:52px 48px 0; }
+  .mc-cell{ flex:1; border-top:4px solid var(--ink); padding-top:11px; }
+  .mc-cell .k{ font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); font-weight:700; }
+  .mc-cell .v{ font-size:38px; font-weight:800; letter-spacing:-1px; margin-top:4px; }
+  .mc-cell .v .chg{ font-size:15px; font-weight:800; margin-left:5px; }
+  .mc-cell .d{ font-size:12.5px; color:var(--muted); margin-top:3px; line-height:1.35; }
+
+  /* ---------- WEATHER ---------- */
+  .wx-hero{ margin:24px 48px 0; background:#1a1814; color:var(--ivory); border-radius:16px;
+            padding:34px 36px; display:flex; align-items:center; gap:32px; }
+  .wx-hero .em{ font-size:96px; line-height:1; }
+  .wx-hero .t{ font-size:112px; font-weight:800; letter-spacing:-4px; line-height:.9; }
+  .wx-hero .t sup{ font-size:44px; font-weight:700; }
+  .wx-hero .where{ font-size:13px; letter-spacing:3px; color:var(--gold); font-weight:800; }
+  .wx-hero .cond{ font-size:17.5px; color:#cfcabd; margin-top:8px; }
+  .wx-cells{ margin-left:auto; display:flex; flex-direction:column; gap:13px; }
+  .wx-cells .c{ display:flex; justify-content:space-between; gap:26px; font-size:15px;
+                border-bottom:1px solid #3a362e; padding-bottom:10px; }
+  .wx-cells .c span{ color:#a49d8e; } .wx-cells .c b{ font-weight:800; }
+  .wx-days{ display:flex; gap:13px; margin:22px 48px 0; }
+  .wxd{ flex:1; background:var(--paper); border:1.5px solid var(--track); border-radius:12px;
+        text-align:center; padding:20px 6px 18px; }
+  .wxd .d{ font-size:13px; letter-spacing:2px; font-weight:800; color:var(--muted); }
+  .wxd .i{ font-size:36px; margin-top:9px; }
+  .wxd .hi{ font-size:23px; font-weight:800; margin-top:8px; }
+  .wxd .lo{ font-size:14px; color:var(--muted); font-weight:600; margin-top:1px; }
+  .wxd .rn{ font-size:12.5px; color:var(--gold); font-weight:800; margin-top:7px; }
+  .wx-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:13px; margin:16px 48px 0; }
+  .wxr{ background:var(--paper); border:1.5px solid var(--track); border-radius:12px;
+        padding:19px 18px; display:flex; align-items:center; gap:13px; }
+  .wxr .i{ font-size:31px; }
+  .wxr .n{ font-size:16px; font-weight:800; }
+  .wxr .r{ font-size:12.5px; color:var(--muted); font-weight:600; }
+  .wxr .t{ margin-left:auto; font-size:25px; font-weight:800; }
+
+  /* ---------- TRAFFIC ---------- */
+  .tf-hero{ display:flex; align-items:flex-end; gap:26px; padding:20px 48px 0; }
+  .tf-big{ font-size:110px; font-weight:800; letter-spacing:-4px; line-height:.85; }
+  .tf-big sup{ font-size:44px; font-weight:700; letter-spacing:0; }
+  .tf-meta{ padding-bottom:8px; }
+  .tf-line{ font-size:15px; margin-top:10px; max-width:330px; line-height:1.4; color:var(--ink); }
+  .tf-line b{ font-weight:800; }
+  .tf-list{ margin:22px 48px 0; }
+  .tf-row{ display:flex; align-items:center; gap:14px; padding:10px 0; border-bottom:1px solid var(--track); }
+  .tf-row .nm{ width:280px; }
+  .tf-row .nm b{ display:block; font-size:14.5px; font-weight:800; }
+  .tf-row .nm span{ font-size:12px; color:var(--muted); font-weight:600; }
+  .tf-row .track{ flex:1; height:14px; background:var(--track); border-radius:8px; overflow:hidden; }
+  .tf-row .bar{ height:100%; border-radius:8px; }
+  .bar.ok{ background:var(--emerald); } .bar.slow{ background:var(--gold); } .bar.heavy{ background:var(--coral); }
+  .tf-row .pc{ width:48px; text-align:right; font-size:14.5px; font-weight:800; }
+  .pc.ok{ color:var(--emerald); } .pc.slow{ color:var(--gold); } .pc.heavy{ color:var(--coral); }
+  .tf-leg{ display:flex; gap:22px; margin:12px 48px 0; font-size:12.5px; color:var(--muted); font-weight:700; }
+  .tf-leg i{ width:11px; height:11px; border-radius:3px; display:inline-block; margin-right:6px;
+             vertical-align:-1px; font-style:normal; }
+
+  /* ---------- TRENDING ---------- */
+  .tn-spot{ margin:26px 48px 0; background:#1a1814; color:var(--ivory); border-radius:16px;
+            padding:30px 30px; display:flex; align-items:center; gap:24px; }
+  .tn-spot .rk{ font-size:64px; font-weight:800; color:var(--gold); line-height:1; }
+  .tn-spot .tag{ font-size:37px; font-weight:800; }
+  .tn-spot .why{ font-size:15px; color:#cfcabd; margin-top:8px; line-height:1.45; max-width:400px; }
+  .tn-spot .vol{ margin-left:auto; text-align:right; }
+  .tn-spot .vol b{ font-size:36px; font-weight:800; color:var(--gold); display:block; }
+  .tn-spot .vol span{ font-size:12px; color:#a49d8e; letter-spacing:1px; }
+  .tn-list{ margin:20px 48px 0; }
+  .tn-row{ display:flex; align-items:center; gap:14px; padding:16.5px 0; border-bottom:1px solid var(--track); }
+  .tn-row .rk{ width:32px; font-size:18px; font-weight:800; color:var(--muted); }
+  .tn-row .tag{ width:222px; font-size:18.5px; font-weight:800; }
+  .tn-row .pf{ width:48px; font-size:11.5px; font-weight:800; letter-spacing:1px; color:var(--ivory);
+               background:var(--ink); border-radius:5px; text-align:center; padding:4.5px 0; }
+  .tn-row .track{ flex:1; height:15px; background:var(--track); border-radius:8px; overflow:hidden; }
+  .tn-row .bar{ height:100%; background:var(--barsc); border-radius:8px; }
+  .tn-row.hot .bar{ background:var(--gold); }
+  .tn-row .v{ width:60px; text-align:right; font-size:15px; font-weight:800; color:var(--muted); }
+  .tn-row.hot .v{ color:var(--ink); }
+
+  /* ---------- INSIDE BACK / TOMORROW ---------- */
+  .ib-body{ flex:1; display:flex; flex-direction:column; justify-content:center; padding:0 84px;
+            position:relative; }
+  .ib-wm{ position:absolute; right:-30px; bottom:40px; font-size:420px; font-weight:800;
+          color:rgba(26,24,20,.05); line-height:1; pointer-events:none; }
+  .ib-k{ font-size:14px; letter-spacing:5px; color:var(--gold); font-weight:800; }
+  .ib-t{ font-size:44px; font-weight:800; line-height:1.1; margin-top:14px; }
+  .ib-row{ display:flex; gap:16px; align-items:baseline; padding:17px 2px; border-bottom:1.5px solid var(--track); }
+  .ib-row .n{ font-size:14px; font-weight:800; color:var(--gold); }
+  .ib-row .t2{ font-size:19px; font-weight:800; }
+  .ib-row .s{ font-size:14px; color:var(--muted); margin-left:auto; text-align:right; }
+  .ib-rows{ margin-top:26px; }
+  .ib-sub{ margin-top:40px; border:2.5px solid var(--gold); border-radius:16px; padding:20px 26px; }
+  .ib-sub b{ font-size:17px; font-weight:800; color:var(--ink); display:block; }
+  .ib-sub span{ font-size:14px; color:var(--muted); line-height:1.5; display:block; margin-top:5px; }
+
+  /* ---------- BACK COVER ---------- */
+  .bc-body{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+            text-align:center; padding:0 70px; position:relative; }
+  .bc-star{ font-size:74px; color:var(--gold); }
+  .bc-word{ font-size:58px; font-weight:800; letter-spacing:3px; margin-top:16px; }
+  .bc-word span{ color:var(--gold); }
+  .bc-tag{ font-size:15px; letter-spacing:5px; color:#a49d8e; font-weight:700; margin-top:10px; }
+  .bc-about{ font-size:16.5px; line-height:1.7; color:#d8d3c6; margin-top:34px; }
+  .bc-about b{ color:var(--gold); font-weight:700; }
+  .bc-srcs{ margin-top:32px; font-size:13px; color:#a49d8e; line-height:1.7; }
+  .bc-cta{ margin-top:36px; border:2px solid var(--gold); color:var(--gold); border-radius:30px;
+           padding:11px 30px; font-size:14px; font-weight:800; letter-spacing:3px; }
+
+  /* ============ UI CHROME (outside book) ============ */
+  .navzone{ position:absolute; top:0; bottom:0; width:16%; z-index:700; cursor:pointer; }
+  #zoneL{ left:0; } #zoneR{ right:0; }
+  .navbtn{
+    position:fixed; top:50%; transform:translateY(-50%); z-index:900;
+    width:52px; height:52px; border-radius:50%; border:none; cursor:pointer;
+    background:rgba(245,243,238,.1); color:var(--ivory); font-size:21px;
+    backdrop-filter:blur(6px); transition:background .2s, opacity .3s;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .navbtn:hover{ background:var(--gold); color:var(--ink); }
+  .navbtn[disabled]{ opacity:.18; pointer-events:none; }
+  #btnPrev{ left:18px; } #btnNext{ right:18px; }
+
+  #bar{
+    position:fixed; left:50%; bottom:16px; transform:translateX(-50%); z-index:900;
+    display:flex; align-items:center; gap:16px;
+    background:rgba(26,24,20,.82); backdrop-filter:blur(8px);
+    border:1px solid rgba(245,243,238,.12); border-radius:34px; padding:9px 20px;
+  }
+  #bar .bwm{ font-size:13px; font-weight:800; letter-spacing:2px; white-space:nowrap; }
+  #bar .bwm span{ color:var(--gold); }
+  #pageInd{ font-size:12.5px; color:#a49d8e; font-weight:600; white-space:nowrap; min-width:96px; text-align:center; }
+  #dots{ display:flex; gap:7px; }
+  .dot{ width:8px; height:8px; border-radius:50%; background:rgba(245,243,238,.25); cursor:pointer;
+        transition:all .25s; border:none; padding:0; }
+  .dot.on{ background:var(--gold); width:22px; border-radius:5px; }
+  #btnToc{ background:none; border:none; color:var(--ivory); font-size:12px; font-weight:800;
+           letter-spacing:2px; cursor:pointer; padding:5px 4px; }
+  #btnToc:hover{ color:var(--gold); }
+
+  #hint{
+    position:fixed; left:50%; bottom:78px; transform:translateX(-50%); z-index:890;
+    background:rgba(200,150,12,.94); color:var(--ink); font-size:13px; font-weight:700;
+    border-radius:24px; padding:9px 20px; letter-spacing:.4px;
+    animation:hintfade 6s forwards; pointer-events:none; white-space:nowrap;
+  }
+  @keyframes hintfade{ 0%,70%{opacity:1} 100%{opacity:0; visibility:hidden} }
+
+  /* TOC overlay */
+  #tocOv{ position:fixed; inset:0; z-index:1000; background:rgba(20,18,14,.78);
+          backdrop-filter:blur(10px); display:none; align-items:center; justify-content:center; }
+  #tocOv.open{ display:flex; }
+  .toc-panel{ width:min(520px,90vw); max-height:84vh; overflow:auto; background:var(--ivory);
+              color:var(--ink); border-radius:20px; padding:30px 34px; }
+  .toc-panel h2{ font-size:14px; letter-spacing:4px; color:var(--muted); font-weight:800; margin-bottom:6px; }
+  .toc-panel .big{ font-size:30px; font-weight:800; margin-bottom:16px; }
+  .toc-panel .big span{ color:var(--gold); }
+  .tp-row{ display:flex; align-items:baseline; gap:14px; width:100%; text-align:left;
+           background:none; border:none; border-bottom:1px solid var(--track); cursor:pointer;
+           padding:13px 2px; font-family:inherit; }
+  .tp-row:hover .tt{ color:var(--gold); }
+  .tp-row .nn{ font-size:14px; font-weight:800; color:var(--gold); width:26px; }
+  .tp-row .tt{ font-size:18px; font-weight:800; transition:color .15s; }
+  .tp-row .ss{ margin-left:auto; font-size:13px; color:var(--muted); }
+
+  @media (max-width:760px){
+    #btnPrev{ left:6px; } #btnNext{ right:6px; }
+    .navbtn{ width:42px; height:42px; font-size:17px; }
+    #bar{ gap:10px; padding:8px 14px; bottom:10px; }
+    #bar .bwm{ display:none; }
+    #dots{ display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div id="scaler">
+    <div id="book" class="mode-spread">
+      <div class="edge" id="edgeL"></div>
+      <div class="edge" id="edgeR"></div>
+      <div class="navzone" id="zoneL" aria-label="Previous page"></div>
+      <div class="navzone" id="zoneR" aria-label="Next page"></div>
+    </div>
+  </div>
+</div>
+
+<button class="navbtn" id="btnPrev" aria-label="Previous">&#10094;</button>
+<button class="navbtn" id="btnNext" aria-label="Next">&#10095;</button>
+
+<div id="bar">
+  <div class="bwm">CEDI<span>BOARD</span></div>
+  <div id="dots"></div>
+  <div id="pageInd"></div>
+  <button id="btnToc">INDEX</button>
+</div>
+
+<div id="hint">Flip the pages — tap the edges, swipe, or use &larr; &rarr;</div>
+
+<div id="tocOv">
+  <div class="toc-panel">
+    <h2>IN THIS EDITION</h2>
+    <div class="big">CEDI<span>BOARD</span> &middot; N&ordm; 001</div>
+    <div id="tocList"></div>
+  </div>
+</div>
+
+<script>
+/* ================= CONTENT ================= */
+
+const EDITION = { no:"001", day:"Friday", date:"3 July 2026", month:"JULY 2026", city:"Accra" };
+
+function header(eyebrow){
+  return `<div class="hd">
+    <div class="eyebrow">${eyebrow}</div>
+    <div class="wordmark">
+      <div class="f1">FINEX <span>INSIGHTS</span></div>
+      <div class="f2">DATA &middot; CLEARLY TOLD</div>
+    </div>
+  </div>`;
+}
+function footer(source, pageNo){
+  return `<div class="ft">
+    <div class="src">${source}</div>
+    <div class="ftrow">
+      <div class="brand">
+        <div class="flag"><div class="fr"></div><div class="fy"></div><div class="fg"></div><span class="star">&#9733;</span></div>
+        <div class="handles">@finexskillshub <span>&middot; X &amp; LinkedIn &middot;</span> @finex insights</div>
+      </div>
+      <div class="folio">PAGE ${String(pageNo).padStart(2,"0")} &middot; ${EDITION.month}</div>
+    </div>
+  </div>`;
+}
+const tri = d => d>0 ? `<span class="pos">&#9650;</span>` : d<0 ? `<span class="neg">&#9660;</span>` : `<span class="flat">&#9679;</span>`;
+const AD = `<div class="adslot"><div class="k">ADVERTISEMENT</div><b>Place your advert here</b><span>Contact us on <a href="tel:+233244782356">+233 24 478 2356</a> &middot; <a href="https://wa.me/233244782356" target="_blank" rel="noopener">WhatsApp us</a></span></div>`;
+const chg = d => d>0 ? `<span class="pos">&#9650; ${d.toFixed(2)}</span>` : d<0 ? `<span class="neg">&#9660; ${Math.abs(d).toFixed(2)}</span>` : `<span class="flat">&#9679; no change</span>`;
+
+/* ---- FX page factory ---- */
+function fxPage({code, dataDate, vsDate, rates, sample, pageNo, source}){
+  const cards = rates.map(r=>`
+    <div class="fxc">
+      <div class="tab"><span class="slot"></span><span class="slot"></span></div>
+      <h3>${r.name}</h3>
+      <div class="rate">${tri(r.d)} <span class="cur">&cent;</span>${r.v.toFixed(2)}</div>
+      <div class="lbl">${r.lbl}</div>
+      <div class="chg">${chg(r.d)}</div>
+    </div>`).join("");
+  return `
+    ${header(`CEDI <b>BOARD</b>${sample?' &nbsp;<span class="sample">SAMPLE</span>':''}`)}
+    <div class="fx-date">${dataDate}</div>
+    <div class="fx-title">${code} <span class="arr">&rarr;</span> GHS RATES</div>
+    <div class="fx-rule"></div>
+    <div class="fx-sub">Daily movements &middot; change vs ${vsDate}</div>
+    <div class="fx-leg">
+      <span><b class="pos">&#9650;</b> rate up</span>
+      <span><b class="neg">&#9660;</b> rate down</span>
+      <span><b class="flat">&#9679;</b> no change</span>
+    </div>
+    <div class="fx-grid">${cards}</div>
+    ${footer(source, pageNo)}`;
+}
+
+const USD = [
+  {name:"Bank of Ghana", v:11.36, d: 0.06, lbl:"Selling rate"},
+  {name:"Google",        v:11.31, d: 0.02, lbl:"Reference rate"},
+  {name:"Bloomberg",     v:11.33, d: 0.05, lbl:"Reference rate"},
+  {name:"Visa",          v:12.15, d: 0.00, lbl:"Processing rate"},
+  {name:"Banks",         v:11.86, d: 0.01, lbl:"Average selling rate"},
+  {name:"Mastercard",    v:12.22, d: 0.05, lbl:"Processing rate"},
+  {name:"Western Union", v:10.28, d: 0.03, lbl:"Remittance rate"},
+  {name:"Binance (P2P)", v:12.07, d: 0.00, lbl:"Mid rate"},
+  {name:"Aboki / Forex Bureau", v:12.35, d:0.05, lbl:"Selling rate *"}
+];
+const GBP = [
+  {name:"Bank of Ghana", v:15.45, d: 0.08, lbl:"Selling rate"},
+  {name:"Google",        v:15.38, d: 0.03, lbl:"Reference rate"},
+  {name:"Bloomberg",     v:15.41, d: 0.06, lbl:"Reference rate"},
+  {name:"Visa",          v:16.52, d: 0.00, lbl:"Processing rate"},
+  {name:"Banks",         v:16.13, d: 0.02, lbl:"Average selling rate"},
+  {name:"Mastercard",    v:16.61, d: 0.07, lbl:"Processing rate"},
+  {name:"Western Union", v:13.98, d:-0.04, lbl:"Remittance rate"},
+  {name:"Binance (P2P)", v:16.41, d: 0.00, lbl:"Mid rate"},
+  {name:"Aboki / Forex Bureau", v:16.79, d:0.06, lbl:"Selling rate *"}
+];
+const EUR = [
+  {name:"Bank of Ghana", v:13.29, d: 0.05, lbl:"Selling rate"},
+  {name:"Google",        v:13.24, d: 0.02, lbl:"Reference rate"},
+  {name:"Bloomberg",     v:13.26, d: 0.04, lbl:"Reference rate"},
+  {name:"Visa",          v:14.22, d: 0.00, lbl:"Processing rate"},
+  {name:"Banks",         v:13.88, d: 0.02, lbl:"Average selling rate"},
+  {name:"Mastercard",    v:14.30, d: 0.04, lbl:"Processing rate"},
+  {name:"Western Union", v:12.03, d:-0.02, lbl:"Remittance rate"},
+  {name:"Binance (P2P)", v:14.12, d: 0.00, lbl:"Mid rate"},
+  {name:"Aboki / Forex Bureau", v:14.45, d:0.05, lbl:"Selling rate *"}
+];
+
+/* ---- page definitions ---- */
+const PAGES = [
+
+/* 01 — COVER */
+{ id:"cover", title:"Front Page", sub:"Cover & index", html:`
+  ${header(`A FINEX INSIGHTS <b>PUBLICATION</b>`)}
+  <div class="cv-rules"></div>
+  <div class="cv-mast">
+    <div class="cv-title">CEDI<span>BOARD</span></div>
+    <div class="cv-tag">Today&rsquo;s Ghana in two minutes &mdash; the data newspaper you can flip.</div>
+  </div>
+  <div class="cv-date">
+    <span>${EDITION.day}, ${EDITION.date}</span><i>&#9670;</i>
+    <span>Edition N&ordm; ${EDITION.no}</span><i>&#9670;</i>
+    <span>${EDITION.city}, Ghana</span>
+  </div>
+  <div class="cv-lead" data-goto="1">
+    <img src="assets/story3-inflation.jpg" alt="Chart: inflation rising from 3.7% in May to 5.3% in June 2026">
+    <div>
+      <div class="k">LEAD STORY</div>
+      <h2>Inflation wakes up: 5.3% in June</h2>
+      <p>The first rise after eleven months of cooling prices &mdash; plus five more stories shaping Ghana today. <b>p.&nbsp;02 &rarr;</b></p>
+    </div>
+  </div>
+  <div class="cv-glance">
+    <div class="g"><span>USD &rarr; GHS</span><b>&cent;11.36</b><i class="pos">&#9650; 0.06</i></div>
+    <div class="g"><span>GSE-CI YTD</span><b>+67.9%</b><i style="color:var(--gold)">14,724 pts</i></div>
+    <div class="g"><span>INFLATION</span><b>5.3%</b><i class="pos">&#9650; 1.6pp</i></div>
+  </div>
+  <div class="cv-toc">
+    <h3>IN THIS EDITION</h3>
+    <div class="toc-row" data-goto="1"><span class="n">02</span><span class="t">The Headlines</span><span class="lead"></span><span class="sub">6 stories shaping Ghana</span></div>
+    <div class="toc-row" data-goto="2"><span class="n">03</span><span class="t">Money Boards</span><span class="lead"></span><span class="sub">USD &middot; GBP &middot; EUR &middot; Fuel</span></div>
+    <div class="toc-row" data-goto="6"><span class="n">07</span><span class="t">GSE Scoreboard</span><span class="lead"></span><span class="sub">market pulse</span></div>
+    <div class="toc-row" data-goto="7"><span class="n">08</span><span class="t">Sports Board</span><span class="lead"></span><span class="sub">Black Stars &amp; GPL</span></div>
+    <div class="toc-row" data-goto="8"><span class="n">09</span><span class="t">Street Prices</span><span class="lead"></span><span class="sub">what things cost</span></div>
+    <div class="toc-row" data-goto="9"><span class="n">10</span><span class="t">Weather Forecast</span><span class="lead"></span><span class="sub">Accra &amp; the regions</span></div>
+    <div class="toc-row" data-goto="10"><span class="n">11</span><span class="t">Traffic Watch</span><span class="lead"></span><span class="sub">Accra corridors</span></div>
+    <div class="toc-row" data-goto="11"><span class="n">12</span><span class="t">Trending Now</span><span class="lead"></span><span class="sub">social media pulse</span></div>
+    <div class="toc-row" data-goto="12"><span class="n">13</span><span class="t">Macro Watch</span><span class="lead"></span><span class="sub">inflation &amp; rates</span></div>
+  </div>
+  ${footer("CEDIBOARD is a daily data journal. Tap a line above to jump straight to its page.", 1)}
+`},
+
+/* 02 — HEADLINES */
+{ id:"headlines", title:"The Headlines", sub:"6 stories shaping Ghana", html:`
+  ${header(`GHANA <b>IN NUMBERS</b>`)}
+  <div class="hl-title">
+    <h1>In the Headlines: 6 Major Stories Shaping Ghana Today</h1>
+    <div class="sub">Thursday, 2 July 2026</div>
+  </div>
+  <div class="hl-grid">
+    <div class="story">
+      <div class="top"><div class="chip" style="background:#fbe3e0">&#9888;&#65039;</div><h2>Ghanaian Killed in SA Protests</h2></div>
+      <img class="pic" src="assets/story1-sa-protests.jpg" alt="Protest scene in Cape Town with South African flags">
+      <p>A 40-year-old Ghanaian was tragically shot during xenophobic demonstrations in Cape Town, South Africa.</p>
+    </div>
+    <div class="story">
+      <div class="top"><div class="chip" style="background:#fdeeda">&#9935;&#65039;</div><h2>Illegal Miners Threaten Hospital Project</h2></div>
+      <img class="pic" src="assets/story2-illegal-miners.jpg" alt="Excavated land behind the Agenda 111 hospital structure">
+      <p>Galamsey operators have excavated lands directly behind the unfinished Agenda&nbsp;111 Hospital in Adansi Asokwa.</p>
+    </div>
+    <div class="story">
+      <div class="top"><div class="chip" style="background:#dff2e8">&#128200;</div><h2>June Inflation Rises to 5.3%</h2></div>
+      <img class="pic" src="assets/story3-inflation.jpg" alt="Line chart of inflation rising from 3.7% in May to 5.3% in June 2026" style="object-fit:contain; background:#fff;">
+      <p>Inflation increased to 5.3 percent in June 2026, up from May&rsquo;s 3.7 percent &mdash; the first rise this year.</p>
+    </div>
+    <div class="story">
+      <div class="top"><div class="chip" style="background:#e2ecf8">&#9917;</div><h2>Ati-Zigi and Semenyo Cleared for Colombia</h2></div>
+      <img class="pic" src="assets/story4-colombia.jpg" alt="Ati-Zigi and Semenyo with a medically cleared clipboard">
+      <p>Both players declared medically fit for Ghana&rsquo;s next World Cup match against Colombia. Preview on p.&nbsp;07.</p>
+    </div>
+    <div class="story">
+      <div class="top"><div class="chip" style="background:#ece4f4">&#128737;&#65039;</div><h2>Defence Chief Warns of Extremism</h2></div>
+      <img class="pic" src="assets/story5-extremism.jpg" alt="Map of Ghana with threat arrows from the Sahel and the coast">
+      <p>Ghana faces growing dual security threats from cross-border Sahel extremists and regional maritime crime.</p>
+    </div>
+    <div class="story">
+      <div class="top"><div class="chip" style="background:#e5e2da">&#128680;</div><h2>Police Intercept 50,000 Ammunition Rounds</h2></div>
+      <img class="pic" src="assets/story6-ammunition.jpg" alt="Crates of seized ammunition rounds with police tape and handcuffs" style="object-position:center top;">
+      <p>Three suspects were arrested in the Upper West Region with a massive haul of live ammunition.</p>
+    </div>
+  </div>
+  ${footer("Stories compiled by Finex Skills Hub from national news wires &middot; 2 July 2026.", 2)}
+`},
+
+/* 03 — USD */
+{ id:"usd", title:"USD → GHS", sub:"Dollar board", html: fxPage({
+    code:"USD", dataDate:"2 JULY 2026", vsDate:"1 July", rates:USD, sample:false, pageNo:3,
+    source:"Source: CediRates; Bank of Ghana official rate; Google &amp; Bloomberg reference rates &middot; 2 July vs 1 July 2026. *Forex bureau rates may vary."
+})},
+
+/* 04 — GBP */
+{ id:"gbp", title:"GBP → GHS", sub:"Pound board", html: fxPage({
+    code:"GBP", dataDate:"2 JULY 2026", vsDate:"1 July", rates:GBP, sample:true, pageNo:4,
+    source:"Illustrative sample rates for design preview &mdash; replace with CediRates / Bank of Ghana GBP figures on publication day. *Forex bureau rates may vary."
+})},
+
+/* 05 — EUR */
+{ id:"eur", title:"EUR → GHS", sub:"Euro board", html: fxPage({
+    code:"EUR", dataDate:"2 JULY 2026", vsDate:"1 July", rates:EUR, sample:true, pageNo:5,
+    source:"Illustrative sample rates for design preview &mdash; replace with CediRates / Bank of Ghana EUR figures on publication day. *Forex bureau rates may vary."
+})},
+
+/* 06 — FUEL */
+{ id:"fuel", title:"Fuel Board", sub:"Pump prices per litre", html: (()=>{
+  const F = [
+    {n:"GOIL",          p:13.05, dp:0.15, d:13.55, dd:0.15},
+    {n:"Star Oil",      p:12.45, dp:0.00, d:12.95, dd:0.00},
+    {n:"Shell (Vivo)",  p:13.35, dp:0.10, d:13.95, dd:0.12},
+    {n:"TotalEnergies", p:13.30, dp:0.10, d:13.90, dd:0.10},
+    {n:"Puma Energy",   p:12.90, dp:0.05, d:13.40, dd:0.08},
+    {n:"Allied Oil",    p:12.65, dp:0.05, d:13.15, dd:0.05},
+    {n:"Zen Petroleum", p:12.80, dp:0.08, d:13.30, dd:0.10},
+    {n:"Petrosol",      p:12.85, dp:0.10, d:13.35, dd:0.10},
+    {n:"Frimps Oil",    p:12.75, dp:0.00, d:13.05, dd:0.05}
+  ];
+  const dl = v => v>0 ? `<i class="pos">&#9650; ${v.toFixed(2)}</i>`
+                : v<0 ? `<i class="neg">&#9660; ${Math.abs(v).toFixed(2)}</i>`
+                : `<i class="flat">&#9679; no change</i>`;
+  const cards = F.map(f=>`
+    <div class="fxc fuelc">
+      <div class="tab"><span class="slot"></span><span class="slot"></span></div>
+      <h3>${f.n}</h3>
+      <div class="fl2">
+        <div><span>PETROL</span><b><span class="cur">&cent;</span>${f.p.toFixed(2)}</b>${dl(f.dp)}</div>
+        <div class="sep"></div>
+        <div><span>DIESEL</span><b><span class="cur">&cent;</span>${f.d.toFixed(2)}</b>${dl(f.dd)}</div>
+      </div>
+    </div>`).join("");
+  return `
+  ${header(`FUEL <b>BOARD</b> &nbsp;<span class="sample">SAMPLE</span>`)}
+  <div class="fx-date">JULY 2026 &middot; PRICING WINDOW 2</div>
+  <div class="fx-title" style="font-size:52px">FUEL PUMP PRICES</div>
+  <div class="fx-rule"></div>
+  <div class="fx-sub">GHS per litre &middot; change vs previous pricing window</div>
+  <div class="cv-glance" style="margin-top:16px">
+    <div class="g"><span>PETROL AVG</span><b>&cent;12.90</b><i class="pos">&#9650; 0.08</i></div>
+    <div class="g"><span>DIESEL AVG</span><b>&cent;13.40</b><i class="pos">&#9650; 0.09</i></div>
+    <div class="g"><span>CHEAPEST PUMP</span><b style="font-size:18px">Star Oil</b><i style="color:var(--gold)">&cent;12.45 petrol</i></div>
+  </div>
+  <div class="fx-grid" style="margin-top:18px">${cards}</div>
+  <div class="stp-note"><b>Window watch:</b> OMCs opened July&rsquo;s second pricing window slightly higher as crude firmed &mdash; but Star Oil is holding the floor at &cent;12.45, a full 90 pesewas under Shell.</div>
+  ${footer("Structured for live CediRates fuel data (cedirates.com/fuel-prices/gh) &mdash; prices shown are illustrative SAMPLE values pending the feed. Averages: simple mean of listed OMCs, Calc: Finex Insights.", 6)}`;
+})() },
+
+/* 07 — GSE */
+{ id:"gse", title:"GSE Scoreboard", sub:"Ghana Market Pulse", html:`
+  ${header(`GHANA MARKET <b>PULSE</b>`)}
+  <div class="gse-date">Tuesday, 30 June 2026 <span>&middot; GSE Close</span></div>
+  <div class="gse-idx">
+    <div class="panel">
+      <div class="k">GSE COMPOSITE INDEX</div>
+      <div class="v">14,724.26</div>
+      <div class="pts">+0.81 pts d/d</div>
+      <div class="row"><span class="pill">&#9650; +0.01%</span><span class="ytd">YTD<b>+67.89%</b></span></div>
+    </div>
+    <div class="panel">
+      <div class="k">DSI-20 INDEX</div>
+      <div class="v">759.89</div>
+      <div class="pts">+0.38 pts d/d</div>
+      <div class="row"><span class="pill">&#9650; +0.05%</span><span class="ytd">YTD<b>+87.24%</b></span></div>
+    </div>
+  </div>
+  <div class="gse-kpis">
+    <div class="kpi"><div class="k">Market Cap</div><div class="v">GHS 287.48bn</div><div class="d">+0.00% d/d</div></div>
+    <div class="kpi"><div class="k">Turnover</div><div class="v">GHS 7.94mn</div><div class="d neg">&#9650; +14.08% d/d</div></div>
+    <div class="kpi"><div class="k">Counters Traded</div><div class="v">25</div><div class="d">2.17mn shares, down from 26</div></div>
+  </div>
+  <div class="gse-movers">
+    <div class="mv g">
+      <h3>TOP GAINERS</h3>
+      <div class="r"><b>TOTAL</b><span class="p">GHS 39.60</span><span class="c" style="color:var(--gold)">+10.00%</span></div>
+      <div class="r"><b>IIL</b><span class="p">GHS 0.18</span><span class="c" style="color:var(--gold)">+5.88%</span></div>
+      <div class="r"><b>SOGEGH</b><span class="p">GHS 6.81</span><span class="c" style="color:var(--gold)">+0.15%</span></div>
+    </div>
+    <div class="mv l">
+      <h3>WORST LAGGARDS</h3>
+      <div class="r"><b>MTNGH</b><span class="p">GHS 6.41</span><span class="c" style="color:var(--coral)">&minus;0.47%</span></div>
+      <div class="r"><b>SIC</b><span class="p">GHS 6.01</span><span class="c" style="color:var(--coral)">&minus;0.17%</span></div>
+    </div>
+  </div>
+  <div class="gse-tr">
+    <h3>TOP TRADERS BY VALUE (GHS) &middot; BARS = SHARE OF TOP TRADER</h3>
+    <div class="tr-row top"><span class="n">MTNGH</span><div class="track"><div class="bar" style="width:100%"></div></div><span class="v">4,425,912</span></div>
+    <div class="tr-row"><span class="n">KASA</span><div class="track"><div class="bar" style="width:36.6%"></div></div><span class="v">1,621,400</span></div>
+    <div class="tr-row"><span class="n">GCB</span><div class="track"><div class="bar" style="width:11%"></div></div><span class="v">487,920</span></div>
+    <div class="tr-row"><span class="n">CAL</span><div class="track"><div class="bar" style="width:8.9%"></div></div><span class="v">395,709</span></div>
+    <div class="tr-row"><span class="n">TOTAL</span><div class="track"><div class="bar" style="width:8.9%"></div></div><span class="v">393,450</span></div>
+  </div>
+  <div class="finexview">
+    <h3>FINEX VIEW</h3>
+    <p>Turnover picked up <b>14%</b> today, but the story is concentration, not breadth. MTNGH alone moved <b>55.75%</b> of everything traded, and with KASA the two names made up <b>76.16%</b>. The GSE-CI barely moved on the day, yet its YTD run now stands at a staggering <b>+67.89%</b> &mdash; this market keeps climbing on thin, lopsided volume.</p>
+  </div>
+  ${footer("Source: Databank Research &middot; Ghana Daily Market Review &middot; 30 June 2026. Turnover share, Calc: Finex Insights.", 7)}
+`},
+
+/* 07 — SPORTS */
+{ id:"sports", title:"Sports Board", sub:"Black Stars & GPL", html:`
+  ${header(`CEDIBOARD <b>SPORTS</b> &nbsp;<span class="sample">SAMPLE</span>`)}
+  <div class="sp-match">
+    <div class="k">WORLD CUP &middot; GROUP STAGE &middot; MATCHDAY 2</div>
+    <div class="sp-vs">
+      <div class="sp-team">
+        <div class="crest" style="background:linear-gradient(180deg,#CE1126 33%,#FCD116 33% 66%,#006B3F 66%)">&#9733;</div>
+        <h4>GHANA</h4>
+        <div class="form"><i class="f-w"></i><i class="f-w"></i><i class="f-d"></i><i class="f-w"></i><i class="f-l"></i></div>
+      </div>
+      <div class="sp-mid">
+        <div class="vs">VS</div>
+        <div class="when">Sun 5 July 2026 &middot; 20:00 GMT<br>NRG Stadium, Houston</div>
+      </div>
+      <div class="sp-team">
+        <div class="crest" style="background:linear-gradient(180deg,#FCD116 50%,#003893 50% 75%,#CE1126 75%)">&#9917;</div>
+        <h4>COLOMBIA</h4>
+        <div class="form"><i class="f-w"></i><i class="f-d"></i><i class="f-w"></i><i class="f-w"></i><i class="f-d"></i></div>
+      </div>
+    </div>
+    <div class="sp-note"><b>Team news:</b> Ati-Zigi and Semenyo have been declared medically fit and cleared to start. Ghana need a point to reach the round of 16.</div>
+  </div>
+  <div class="sp-sec">
+    <h3>GHANA PREMIER LEAGUE &middot; FINAL TABLE 2025/26 <span class="sample">SAMPLE</span></h3>
+    <div class="lg-row top"><span class="pos-n">1</span><b>Asante Kotoko</b><div class="track"><div class="bar" style="width:100%"></div></div><span class="pts-v">71 pts</span></div>
+    <div class="lg-row"><span class="pos-n">2</span><b>Hearts of Oak</b><div class="track"><div class="bar" style="width:94%"></div></div><span class="pts-v">67 pts</span></div>
+    <div class="lg-row"><span class="pos-n">3</span><b>Medeama SC</b><div class="track"><div class="bar" style="width:89%"></div></div><span class="pts-v">63 pts</span></div>
+    <div class="lg-row"><span class="pos-n">4</span><b>Dreams FC</b><div class="track"><div class="bar" style="width:83%"></div></div><span class="pts-v">59 pts</span></div>
+    <div class="lg-row"><span class="pos-n">5</span><b>Bibiani GoldStars</b><div class="track"><div class="bar" style="width:80%"></div></div><span class="pts-v">57 pts</span></div>
+  </div>
+  <div class="sp-sec">
+    <h3>GHANAIANS ABROAD &middot; SEASON WRAP <span class="sample">SAMPLE</span></h3>
+    <div class="ab-row"><div class="chip">&#9917;</div><div class="who"><b>Mohammed Kudus</b><span>Premier League &middot; England</span></div><div class="stat">12 G &middot; 9 A<span>38 apps</span></div></div>
+    <div class="ab-row"><div class="chip">&#9917;</div><div class="who"><b>Antoine Semenyo</b><span>Premier League &middot; England</span></div><div class="stat">14 G &middot; 6 A<span>36 apps</span></div></div>
+    <div class="ab-row"><div class="chip">&#129508;</div><div class="who"><b>Lawrence Ati-Zigi</b><span>Super League &middot; Switzerland</span></div><div class="stat">11 clean sheets<span>33 apps</span></div></div>
+  </div>
+  ${AD}
+  ${footer("Fixtures and player statistics are illustrative SAMPLE data for design preview &middot; verify against GFA / league sources before publication.", 8)}
+`},
+
+/* 08 — STREET PRICES */
+{ id:"street", title:"Street Prices", sub:"What things cost", html:`
+  ${header(`STREET PRICE <b>BOARD</b> &nbsp;<span class="sample">SAMPLE</span>`)}
+  <div class="fx-date">ACCRA &middot; JULY 2026</div>
+  <div class="fx-title" style="font-size:52px">WHAT THINGS COST</div>
+  <div class="fx-rule"></div>
+  <div class="fx-sub">Average street prices &middot; change vs June 2026</div>
+  <div class="stp-grid">
+    <div class="stp"><div class="em">&#9981;</div><h3>Petrol</h3><div class="pr"><span class="cur">&cent;</span>12.90</div><div class="un">per litre</div><div class="chg pos">&#9650; 0.35 m/m</div></div>
+    <div class="stp"><div class="em">&#128666;</div><h3>Trotro: Circle &rarr; Madina</h3><div class="pr"><span class="cur">&cent;</span>8.00</div><div class="un">per trip</div><div class="chg flat">&#9679; no change</div></div>
+    <div class="stp"><div class="em">&#128230;</div><h3>Rice (5 kg, local)</h3><div class="pr"><span class="cur">&cent;</span>145</div><div class="un">per bag</div><div class="chg pos">&#9650; 5.00 m/m</div></div>
+    <div class="stp"><div class="em">&#127805;</div><h3>Kenkey</h3><div class="pr"><span class="cur">&cent;</span>5.00</div><div class="un">per ball</div><div class="chg pos">&#9650; 0.50 m/m</div></div>
+    <div class="stp"><div class="em">&#128167;</div><h3>Sachet water</h3><div class="pr"><span class="cur">&cent;</span>6.50</div><div class="un">per bag (30)</div><div class="chg flat">&#9679; no change</div></div>
+    <div class="stp"><div class="em">&#127859;</div><h3>Cooking oil (1 L)</h3><div class="pr"><span class="cur">&cent;</span>38</div><div class="un">per bottle</div><div class="chg neg">&#9660; 2.00 m/m</div></div>
+    <div class="stp"><div class="em">&#129370;</div><h3>Eggs</h3><div class="pr"><span class="cur">&cent;</span>62</div><div class="un">per crate (30)</div><div class="chg neg">&#9660; 3.00 m/m</div></div>
+    <div class="stp"><div class="em">&#127813;</div><h3>Tomatoes</h3><div class="pr"><span class="cur">&cent;</span>45</div><div class="un">per olonka</div><div class="chg pos">&#9650; 8.00 m/m</div></div>
+    <div class="stp"><div class="em">&#128293;</div><h3>LPG refill (14.5 kg)</h3><div class="pr"><span class="cur">&cent;</span>210</div><div class="un">per cylinder</div><div class="chg pos">&#9650; 4.00 m/m</div></div>
+  </div>
+  <div class="stp-note"><b>Why it matters:</b> official inflation is 5.3%, but the street feels prices item by item. Tomatoes (+21% m/m) and fuel are doing the pushing this month; eggs and cooking oil are giving a little back.</div>
+  ${footer("Illustrative SAMPLE prices for design preview &mdash; to be replaced with Cediboard market survey data (Accra averages) on publication day.", 9)}
+`},
+
+/* 09 — WEATHER */
+{ id:"weather", title:"Weather Forecast", sub:"Accra & the regions", html:`
+  ${header(`GHANA WEATHER <b>WATCH</b> &nbsp;<span class="sample">SAMPLE</span>`)}
+  <div class="wx-hero">
+    <div class="em">&#127782;&#65039;</div>
+    <div>
+      <div class="where">ACCRA &middot; TODAY, FRIDAY 3 JULY</div>
+      <div class="t">29<sup>&deg;C</sup></div>
+      <div class="cond">Partly cloudy &middot; 60% chance of afternoon showers</div>
+    </div>
+    <div class="wx-cells">
+      <div class="c"><span>Humidity</span><b>84%</b></div>
+      <div class="c"><span>Wind</span><b>12 km/h SW</b></div>
+      <div class="c"><span>UV index</span><b>Moderate</b></div>
+    </div>
+  </div>
+  <div class="wx-days">
+    <div class="wxd"><div class="d">SAT</div><div class="i">&#127783;&#65039;</div><div class="hi">27&deg;</div><div class="lo">23&deg;</div><div class="rn">80% rain</div></div>
+    <div class="wxd"><div class="d">SUN</div><div class="i">&#9928;&#65039;</div><div class="hi">26&deg;</div><div class="lo">23&deg;</div><div class="rn">90% rain</div></div>
+    <div class="wxd"><div class="d">MON</div><div class="i">&#127782;&#65039;</div><div class="hi">28&deg;</div><div class="lo">23&deg;</div><div class="rn">55% rain</div></div>
+    <div class="wxd"><div class="d">TUE</div><div class="i">&#9925;</div><div class="hi">29&deg;</div><div class="lo">24&deg;</div><div class="rn">30% rain</div></div>
+    <div class="wxd"><div class="d">WED</div><div class="i">&#127780;&#65039;</div><div class="hi">30&deg;</div><div class="lo">24&deg;</div><div class="rn">20% rain</div></div>
+  </div>
+  <div class="seclabel" style="margin:30px 48px 0">ACROSS THE REGIONS &middot; TODAY</div>
+  <div class="wx-grid">
+    <div class="wxr"><div class="i">&#127782;&#65039;</div><div><div class="n">Kumasi</div><div class="r">70% rain</div></div><div class="t">26&deg;</div></div>
+    <div class="wxr"><div class="i">&#9728;&#65039;</div><div><div class="n">Tamale</div><div class="r">10% rain</div></div><div class="t">33&deg;</div></div>
+    <div class="wxr"><div class="i">&#127783;&#65039;</div><div><div class="n">Takoradi</div><div class="r">75% rain</div></div><div class="t">27&deg;</div></div>
+    <div class="wxr"><div class="i">&#9925;</div><div><div class="n">Cape Coast</div><div class="r">45% rain</div></div><div class="t">27&deg;</div></div>
+    <div class="wxr"><div class="i">&#127780;&#65039;</div><div><div class="n">Ho</div><div class="r">35% rain</div></div><div class="t">28&deg;</div></div>
+    <div class="wxr"><div class="i">&#9728;&#65039;</div><div><div class="n">Bolgatanga</div><div class="r">15% rain</div></div><div class="t">34&deg;</div></div>
+  </div>
+  <div class="stp-note"><b>Season watch:</b> the July rainy peak is here &mdash; the south sees showers most afternoons this week while the north stays hot and dry. Carry an umbrella after 2pm in Accra.</div>
+  ${footer("Illustrative SAMPLE forecast for design preview &mdash; replace with Ghana Meteorological Agency data on publication day.", 10)}
+`},
+
+/* 10 — TRAFFIC */
+{ id:"traffic", title:"Traffic Watch", sub:"Accra corridors, live", html:`
+  ${header(`ACCRA TRAFFIC <b>WATCH</b> &nbsp;<span class="sample">SAMPLE</span>`)}
+  <div class="fx-date">FRIDAY &middot; 06:30 GMT &middot; MORNING PEAK</div>
+  <div class="tf-hero">
+    <div>
+      <div class="seclabel" style="margin-bottom:8px">CITY-WIDE CONGESTION</div>
+      <div class="tf-big">72<sup>%</sup></div>
+    </div>
+    <div class="tf-meta">
+      <div class="dirpill" style="background:var(--coral)"><span>&#9650;</span><span>HEAVY</span></div>
+      <div class="tf-line">Typical Friday morning: <b>+8pp</b> above the weekday average. Rain overnight is slowing the western corridors.</div>
+    </div>
+  </div>
+  <div class="tf-leg">
+    <span><i style="background:var(--emerald)"></i>flowing</span>
+    <span><i style="background:var(--gold)"></i>slow</span>
+    <span><i style="background:var(--coral)"></i>heavy</span>
+    <span style="margin-left:auto">bar = share of free-flow time lost</span>
+  </div>
+  <div class="tf-list">
+    <div class="tf-row"><div class="nm"><b>N1: Mallam &rarr; Tetteh Quarshie</b><span>38 min &middot; usually 15</span></div><div class="track"><div class="bar heavy" style="width:85%"></div></div><div class="pc heavy">85%</div></div>
+    <div class="tf-row"><div class="nm"><b>Accra&ndash;Tema Motorway</b><span>45 min &middot; usually 18</span></div><div class="track"><div class="bar heavy" style="width:78%"></div></div><div class="pc heavy">78%</div></div>
+    <div class="tf-row"><div class="nm"><b>Spintex Road</b><span>40 min &middot; usually 16</span></div><div class="track"><div class="bar heavy" style="width:72%"></div></div><div class="pc heavy">72%</div></div>
+    <div class="tf-row"><div class="nm"><b>Kaneshie &rarr; Odorkor</b><span>25 min &middot; usually 12</span></div><div class="track"><div class="bar slow" style="width:64%"></div></div><div class="pc slow">64%</div></div>
+    <div class="tf-row"><div class="nm"><b>Madina &rarr; 37 Station</b><span>22 min &middot; usually 11</span></div><div class="track"><div class="bar slow" style="width:58%"></div></div><div class="pc slow">58%</div></div>
+    <div class="tf-row"><div class="nm"><b>Kwame Nkrumah Circle</b><span>18 min &middot; usually 9</span></div><div class="track"><div class="bar slow" style="width:52%"></div></div><div class="pc slow">52%</div></div>
+    <div class="tf-row"><div class="nm"><b>East Legon &rarr; Airport</b><span>12 min &middot; usually 8</span></div><div class="track"><div class="bar ok" style="width:34%"></div></div><div class="pc ok">34%</div></div>
+  </div>
+  <div class="finexview" style="margin-top:20px">
+    <h3>HOTSPOT OF THE DAY</h3>
+    <p>Roadworks at the <b>Motorway roundabout</b> continue until <b>15 July</b> &mdash; single-lane past the interchange from 05:00&ndash;19:00. Heading to Tema before 08:00? Plan <b>+25 minutes</b> or route through Spintex.</p>
+  </div>
+  ${footer("Illustrative SAMPLE congestion data for design preview &mdash; to be fed from live traffic APIs (Google/TomTom) on publication day. Bars scaled to share of free-flow time lost.", 11)}
+`},
+
+/* 11 — TRENDING */
+{ id:"trending", title:"Trending Now", sub:"What Ghana is talking about", html:`
+  ${header(`TRENDING <b>GHANA</b> &nbsp;<span class="sample">SAMPLE</span>`)}
+  <div class="fx-date">LAST 24 HOURS &middot; X, TIKTOK &amp; INSTAGRAM</div>
+  <div class="fx-title" style="font-size:46px">WHAT GHANA IS TALKING ABOUT</div>
+  <div class="fx-rule"></div>
+  <div class="tn-spot">
+    <div class="rk">#1</div>
+    <div>
+      <div class="tag">#BlackStars</div>
+      <div class="why">Sunday&rsquo;s World Cup clash with Colombia has the timeline buzzing &mdash; and the Ati-Zigi &amp; Semenyo all-clear sent it into overdrive.</div>
+    </div>
+    <div class="vol"><b>128k</b><span>MENTIONS &middot; &#9650; +45k</span></div>
+  </div>
+  <div class="tn-list">
+    <div class="tn-row hot"><span class="rk">2</span><span class="tag">#Galamsey</span><span class="pf">&#120143;</span><div class="track"><div class="bar" style="width:58%"></div></div><span class="v">87k</span></div>
+    <div class="tn-row"><span class="rk">3</span><span class="tag">#JuneInflation</span><span class="pf">&#120143;</span><div class="track"><div class="bar" style="width:36%"></div></div><span class="v">54k</span></div>
+    <div class="tn-row"><span class="rk">4</span><span class="tag">#AccraFloods</span><span class="pf">TT</span><div class="track"><div class="bar" style="width:33%"></div></div><span class="v">49k</span></div>
+    <div class="tn-row"><span class="rk">5</span><span class="tag">#GPLFinale</span><span class="pf">&#120143;</span><div class="track"><div class="bar" style="width:27%"></div></div><span class="v">41k</span></div>
+    <div class="tn-row"><span class="rk">6</span><span class="tag">#KudusWatch</span><span class="pf">IG</span><div class="track"><div class="bar" style="width:22%"></div></div><span class="v">33k</span></div>
+    <div class="tn-row"><span class="rk">7</span><span class="tag">#MadeInGhana</span><span class="pf">TT</span><div class="track"><div class="bar" style="width:18%"></div></div><span class="v">27k</span></div>
+    <div class="tn-row"><span class="rk">8</span><span class="tag">#NSMQ2026</span><span class="pf">&#120143;</span><div class="track"><div class="bar" style="width:15%"></div></div><span class="v">22k</span></div>
+  </div>
+  <div class="stp-note"><b>Read of the room:</b> football joy up top, galamsey anger right behind it &mdash; the inflation uptick is the quiet third wheel gaining steam. Bars scaled to a fixed 150k-mention ceiling.</div>
+  ${footer("Illustrative SAMPLE social-listening data for design preview &mdash; to be fed from platform trend APIs on publication day. Mention counts are 24-hour totals across X, TikTok and Instagram.", 12)}
+`},
+
+/* 12 — MACRO */
+{ id:"macro", title:"Macro Watch", sub:"Inflation & rates", html:`
+  ${header(`GHANA MACRO <b>WATCH</b>`)}
+  <div class="mc-hero">
+    <div>
+      <div class="lab">JUNE 2026 &middot; Y/Y INFLATION</div>
+      <div class="mc-big">5.3<sup>%</sup></div>
+    </div>
+    <div class="mc-meta">
+      <div class="dirpill" style="background:var(--coral)"><span>&#9650;</span><span>RISING</span></div>
+      <div class="mc-line">Up from <b>3.7%</b> in May &mdash; the first acceleration after eleven straight months of disinflation.</div>
+    </div>
+  </div>
+  <div class="mc-trend">
+    <div class="seclabel">Last 12 months &middot; year-on-year inflation (%) &middot; <span class="sample" style="font-size:9.5px">PART-SAMPLE</span></div>
+    <div class="mbars">
+      <div class="mcol"><span class="bv">20.9</span><div class="bb" style="height:100%"></div></div>
+      <div class="mcol"><span class="bv">18.4</span><div class="bb" style="height:88%"></div></div>
+      <div class="mcol"><span class="bv">15.2</span><div class="bb" style="height:73%"></div></div>
+      <div class="mcol"><span class="bv">12.1</span><div class="bb" style="height:58%"></div></div>
+      <div class="mcol"><span class="bv">9.4</span><div class="bb" style="height:45%"></div></div>
+      <div class="mcol"><span class="bv">8.0</span><div class="bb" style="height:38%"></div></div>
+      <div class="mcol"><span class="bv">6.9</span><div class="bb" style="height:33%"></div></div>
+      <div class="mcol"><span class="bv">5.9</span><div class="bb" style="height:28%"></div></div>
+      <div class="mcol"><span class="bv">5.2</span><div class="bb" style="height:25%"></div></div>
+      <div class="mcol"><span class="bv">4.6</span><div class="bb" style="height:22%"></div></div>
+      <div class="mcol"><span class="bv">3.7</span><div class="bb" style="height:18%"></div></div>
+      <div class="mcol cur"><span class="bv">5.3</span><div class="bb" style="height:25%"></div></div>
+    </div>
+    <div class="mlabs">
+      <span>J</span><span>A</span><span>S</span><span>O</span><span>N</span><span>D</span>
+      <span>J</span><span>F</span><span>M</span><span>A</span><span>M</span><span class="cur">JUN</span>
+    </div>
+  </div>
+  <div class="mc-split">
+    <div class="mc-cell">
+      <div class="k">Policy rate</div>
+      <div class="v">21.0%<span class="chg flat">HOLD</span></div>
+      <div class="d">MPC held at its last sitting <span class="sample" style="font-size:9px">SAMPLE</span></div>
+    </div>
+    <div class="mc-cell">
+      <div class="k">91-day T-bill</div>
+      <div class="v">14.3%<span class="chg neg">&#9660; 1.2pp</span></div>
+      <div class="d">Yields easing with disinflation <span class="sample" style="font-size:9px">SAMPLE</span></div>
+    </div>
+    <div class="mc-cell">
+      <div class="k">Cedi YTD vs USD</div>
+      <div class="v">+3.1%<span class="chg neg">&#9650;</span></div>
+      <div class="d">Cedi stronger since January <span class="sample" style="font-size:9px">SAMPLE</span></div>
+    </div>
+  </div>
+  ${AD}
+  ${footer("Inflation: Ghana Statistical Service, June 2026 CPI release. Policy rate, T-bill and cedi figures are illustrative SAMPLE values pending Bank of Ghana confirmation.", 13)}
+`},
+
+/* 13 — TOMORROW / INSIDE BACK */
+{ id:"tomorrow", title:"Tomorrow's Edition", sub:"Coming up next", html:`
+  ${header(`CEDI <b>BOARD</b>`)}
+  <div class="ib-body">
+    <div class="ib-wm">&cent;</div>
+    <div class="ib-k">DON&rsquo;T MISS IT</div>
+    <div class="ib-t">In tomorrow&rsquo;s<br>edition</div>
+    <div class="ib-rows">
+      <div class="ib-row"><span class="n">01</span><span class="t2">Black Stars vs Colombia</span><span class="s">full match data &amp; ratings</span></div>
+      <div class="ib-row"><span class="n">02</span><span class="t2">GSE week wrap</span><span class="s">who moved the market</span></div>
+      <div class="ib-row"><span class="n">03</span><span class="t2">Fuel price window</span><span class="s">will the pumps change?</span></div>
+      <div class="ib-row"><span class="n">04</span><span class="t2">Weekend weather</span><span class="s">rain map for all 16 regions</span></div>
+    </div>
+    <div class="ib-sub">
+      <b>Get Cediboard every morning</b>
+      <span>A new edition lands at 06:00 GMT daily &mdash; follow @finexskillshub on X &amp; LinkedIn and never miss a flip.</span>
+    </div>
+    <div class="adslot" style="margin:24px 0 0">
+      <div class="k">CORPORATE SPONSORSHIP &middot; ADVERTISEMENT</div>
+      <b>Place your advert here</b>
+      <span>Contact us on <a href="tel:+233244782356">+233 24 478 2356</a> &middot; <a href="https://wa.me/233244782356" target="_blank" rel="noopener">WhatsApp us</a></span>
+    </div>
+  </div>
+  ${footer("Cediboard Edition N&ordm; 002 publishes Saturday, 4 July 2026 at 06:00 GMT.", 14)}
+`},
+
+/* 15 — FULL-PAGE SPONSORSHIP */
+{ id:"sponsor", title:"Advertise With Us", sub:"Full-page sponsorship", html:`
+  ${header(`CORPORATE <b>SPONSORSHIP</b>`)}
+  <div class="fp-ad">
+    <div class="k">FULL-PAGE ADVERTISEMENT</div>
+    <div class="big">Place your<br>advert here</div>
+    <p>One full page, seen by every reader, every morning. Premium banner slots also available on the Sports, Macro Watch and Tomorrow pages.</p>
+    <div class="cta">
+      <a class="call" href="tel:+233244782356">&#9742; +233 24 478 2356</a>
+      <a class="wa" href="https://wa.me/233244782356" target="_blank" rel="noopener">WhatsApp us</a>
+    </div>
+  </div>
+  ${footer("Rate card available on request &middot; Finex Skills Hub, Accra.", 15)}
+`},
+
+/* 16 — BACK COVER */
+{ id:"back", title:"About Cediboard", sub:"Back cover", dark:true, html:`
+  ${header(`CEDI <b>BOARD</b>`)}
+  <div class="bc-body">
+    <div class="bc-star">&#9733;</div>
+    <div class="bc-word">CEDI<span>BOARD</span></div>
+    <div class="bc-tag">DATA &middot; CLEARLY TOLD</div>
+    <p class="bc-about">
+      Cediboard is a daily interactive data newspaper on the topical issues shaping Ghana &mdash;
+      the cedi, the markets, the streets and the scores &mdash; told through
+      <b>simple visualizations</b> that let anyone get the insight in seconds.
+      Published by <b>Finex Skills Hub</b>, Accra.
+    </p>
+    <div class="bc-srcs">
+      Sources this edition: Ghana Statistical Service &middot; Bank of Ghana &middot; CediRates &middot;
+      Databank Research &middot; Ghana Stock Exchange &middot; national news wires.<br>
+      Pages marked SAMPLE carry illustrative figures for design preview.
+    </div>
+    <div class="bc-cta">NEW EDITION EVERY MORNING &middot; 06:00 GMT</div>
+  </div>
+  ${footer("&copy; 2026 Finex Skills Hub &middot; Cediboard Edition N&ordm; 001 &middot; " + "Designed in the Ivory Charcoal system.", 16)}
+`}
+];
+
+/* ================= FLIP ENGINE ================= */
+
+const PAGE_W = 810, PAGE_H = 1080;
+const book   = document.getElementById("book");
+const scaler = document.getElementById("scaler");
+const edgeL  = document.getElementById("edgeL");
+const edgeR  = document.getElementById("edgeR");
+
+/* build page nodes once */
+const pageEls = PAGES.map(p=>{
+  const el = document.createElement("div");
+  el.className = "page" + (p.dark ? " dark" : "");
+  el.innerHTML = p.html;
+  return el;
+});
+const N = pageEls.length;              /* 10 pages */
+const S = Math.ceil(N/2);              /* 5 sheets  */
+
+let mode    = null;                    /* "spread" | "single" */
+let current = 0;                       /* spread: sheets flipped (0..S) · single: page index (0..N-1) */
+let animating = false;
+let sheets  = [];
+
+function clearBook(){
+  book.querySelectorAll(".sheet, .page").forEach(n=>n.remove());
+  /* wipe inline styles left over from the other mode */
+  pageEls.forEach(p=>{ p.style.display=""; p.style.zIndex=""; p.style.transform="";
+                       p.getAnimations?.().forEach(a=>a.cancel()); });
+}
+
+function buildSpread(){
+  clearBook(); sheets = [];
+  for(let s=0;s<S;s++){
+    const sh = document.createElement("div"); sh.className = "sheet";
+    const f  = document.createElement("div"); f.className = "face front";
+    const b  = document.createElement("div"); b.className = "face back";
+    f.appendChild(pageEls[2*s]);
+    if(pageEls[2*s+1]) b.appendChild(pageEls[2*s+1]);
+    sh.appendChild(f); sh.appendChild(b);
+    book.appendChild(sh); sheets.push(sh);
+  }
+  renderSpread(false);
+}
+function renderSpread(animate=true){
+  sheets.forEach((sh,i)=>{
+    if(!animate) sh.style.transition = "none";
+    sh.classList.toggle("flipped", i < current);
+    sh.style.zIndex = (i < current) ? 10+i : 10+(S-i);
+    if(!animate){ void sh.offsetWidth; sh.style.transition = ""; }
+  });
+  /* center the closed cover / closed back */
+  const shift = current===0 ? -PAGE_W/2 : current===S ? PAGE_W/2 : 0;
+  book.style.transform = `translateX(${shift}px)`;
+  edgeL.style.width = Math.max(0, current-1) * 3 + "px";
+  edgeR.style.width = Math.max(0, S-current-1) * 3 + "px";
+  updateUI();
+}
+function flipSpread(dir){
+  const t = current + dir;
+  if(t<0 || t>S) return;
+  const sh = sheets[dir>0 ? current : current-1];
+  sh.classList.add("turning");
+  setTimeout(()=>sh.classList.remove("turning"), 1800);
+  current = t;
+  renderSpread(true);
+}
+
+function buildSingle(){
+  clearBook(); sheets = [];
+  pageEls.forEach(p=>book.appendChild(p));
+  renderSingle();
+}
+function renderSingle(){
+  pageEls.forEach((p,i)=>{
+    p.style.display = i===current ? "flex" : "none";
+    p.style.zIndex  = i===current ? 20 : 10;
+    p.style.transform = "";
+  });
+  edgeL.style.width = Math.min(current,8) * 2.5 + "px";
+  edgeR.style.width = Math.min(N-1-current,8) * 2.5 + "px";
+  book.style.transform = "";
+  updateUI();
+}
+function flipSingle(dir, fast=false){
+  const t = current + dir;
+  if(t<0 || t>=N || animating) return;
+  animating = true;
+  const out  = pageEls[current], inn = pageEls[t];
+  inn.style.display = "flex";
+  const opts = { duration: fast ? 420 : 950, easing:"cubic-bezier(.42,.03,.18,1)", fill:"forwards" };
+  let anim;
+  if(dir>0){
+    out.style.zIndex = 30; inn.style.zIndex = 20;
+    anim = out.animate([{transform:"perspective(2200px) rotateY(0deg)", filter:"brightness(1)"},
+                        {transform:"perspective(2200px) rotateY(-98deg)", filter:"brightness(.75)"}], opts);
+  } else {
+    inn.style.zIndex = 30; out.style.zIndex = 20;
+    anim = inn.animate([{transform:"perspective(2200px) rotateY(-98deg)", filter:"brightness(.75)"},
+                        {transform:"perspective(2200px) rotateY(0deg)", filter:"brightness(1)"}], opts);
+  }
+  const done = ()=>{
+    if(!animating) return;
+    animating = false;
+    current = t;
+    renderSingle();          /* hide the outgoing page first...   */
+    anim.cancel();           /* ...then drop the persisted effect */
+  };
+  anim.onfinish = done;
+  setTimeout(done, opts.duration + 120);   /* safety fallback */
+}
+
+/* mode & scaling */
+function layout(){
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const nextMode = vw < 820 ? "single" : "spread";
+  if(nextMode !== mode){
+    /* preserve position across modes */
+    let pg = mode==="spread" ? Math.max(0, Math.min(N-1, current*2-1)) : current;
+    if(mode===null) pg = 0;
+    mode = nextMode;
+    book.className = "mode-" + mode;
+    if(mode==="spread"){ current = Math.ceil((pg+ (pg%2===0?0:1))/2); if(pg===0) current=0; buildSpread(); }
+    else { current = pg; buildSingle(); }
+  }
+  const bw = mode==="spread" ? PAGE_W*2 : PAGE_W;
+  const s  = Math.min((vw*0.94)/bw, (vh*0.90)/PAGE_H);
+  scaler.style.transform = `scale(${s})`;
+  scaler.style.width  = bw + "px";
+  scaler.style.height = PAGE_H + "px";
+  book.style.width  = bw + "px";
+  book.style.height = PAGE_H + "px";
+}
+
+/* navigation facade */
+function next(){ mode==="spread" ? flipSpread(1)  : flipSingle(1); }
+function prev(){ mode==="spread" ? flipSpread(-1) : flipSingle(-1); }
+function atStart(){ return current===0; }
+function atEnd(){ return mode==="spread" ? current===S : current===N-1; }
+
+/* jump to a page index (0-based) with a quick riffle in spread mode */
+function goToPage(p){
+  p = Math.max(0, Math.min(N-1, p));
+  if(mode==="single"){
+    if(p===current) return;
+    const dir = p>current ? 1 : -1;
+    const step = ()=>{ if(current!==p){ flipSingle(dir, true); setTimeout(step, 160); } };
+    step();
+  } else {
+    const target = p===0 ? 0 : Math.ceil(p/2) + (p%2===0 ? 0 : 0);
+    const tSheet = p%2===0 ? p/2 : (p+1)/2;
+    const dir = tSheet>current ? 1 : -1;
+    const step = ()=>{ if(current!==tSheet){ flipSpread(dir); setTimeout(step, 420); } };
+    step();
+  }
+  closeToc();
+}
+
+/* ================= UI CHROME ================= */
+const btnPrev = document.getElementById("btnPrev");
+const btnNext = document.getElementById("btnNext");
+const pageInd = document.getElementById("pageInd");
+const dotsEl  = document.getElementById("dots");
+const tocOv   = document.getElementById("tocOv");
+
+/* dots = one per spread position */
+for(let i=0;i<=S;i++){
+  const d = document.createElement("button");
+  d.className = "dot"; d.setAttribute("aria-label","Go to position "+i);
+  d.addEventListener("click", ()=>goToPage(i===0 ? 0 : i*2-1));
+  dotsEl.appendChild(d);
+}
+
+function updateUI(){
+  btnPrev.disabled = atStart();
+  btnNext.disabled = atEnd();
+  if(mode==="spread"){
+    const l = current*2, r = current*2+1;
+    pageInd.textContent = current===0 ? `Cover · 1 / ${N}` :
+      current===S ? `Back cover · ${N} / ${N}` : `Pages ${l}–${r>N?N:r} / ${N}`;
+    [...dotsEl.children].forEach((d,i)=>d.classList.toggle("on", i===current));
+  } else {
+    pageInd.textContent = `Page ${current+1} / ${N}`;
+    [...dotsEl.children].forEach((d,i)=>d.classList.toggle("on", i===Math.ceil(current/2)+(current%2)));
+  }
+}
+
+/* toc overlay */
+const tocList = document.getElementById("tocList");
+PAGES.forEach((p,i)=>{
+  const b = document.createElement("button");
+  b.className = "tp-row";
+  b.innerHTML = `<span class="nn">${String(i+1).padStart(2,"0")}</span><span class="tt">${p.title}</span><span class="ss">${p.sub}</span>`;
+  b.addEventListener("click", ()=>goToPage(i));
+  tocList.appendChild(b);
+});
+function closeToc(){ tocOv.classList.remove("open"); }
+document.getElementById("btnToc").addEventListener("click", ()=>tocOv.classList.add("open"));
+tocOv.addEventListener("click", e=>{ if(e.target===tocOv) closeToc(); });
+
+/* events */
+btnNext.addEventListener("click", next);
+btnPrev.addEventListener("click", prev);
+document.getElementById("zoneR").addEventListener("click", next);
+document.getElementById("zoneL").addEventListener("click", prev);
+document.addEventListener("keydown", e=>{
+  if(e.key==="ArrowRight" || e.key===" ") next();
+  if(e.key==="ArrowLeft") prev();
+  if(e.key==="Escape") closeToc();
+});
+/* clickable cover TOC */
+document.addEventListener("click", e=>{
+  const row = e.target.closest("[data-goto]");
+  if(row) goToPage(parseInt(row.dataset.goto,10));
+});
+/* corner peek on hover (spread) */
+const zoneR = document.getElementById("zoneR"), zoneL = document.getElementById("zoneL");
+zoneR.addEventListener("mouseenter", ()=>{ if(mode==="spread" && !atEnd()) sheets[current]?.classList.add("peek"); });
+zoneR.addEventListener("mouseleave", ()=>sheets.forEach(s=>s.classList.remove("peek")));
+zoneL.addEventListener("mouseenter", ()=>{ if(mode==="spread" && !atStart()) sheets[current-1]?.classList.add("peek"); });
+zoneL.addEventListener("mouseleave", ()=>sheets.forEach(s=>s.classList.remove("peek")));
+
+/* swipe */
+let sx=null, sy=null;
+document.addEventListener("pointerdown", e=>{ sx=e.clientX; sy=e.clientY; });
+document.addEventListener("pointerup", e=>{
+  if(sx===null) return;
+  const dx = e.clientX-sx, dy = e.clientY-sy;
+  if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.4){ dx<0 ? next() : prev(); }
+  sx=sy=null;
+});
+
+/* auto-open the cover if the reader hasn't interacted shortly after load */
+let interacted = false;
+["pointerdown","keydown","wheel"].forEach(ev =>
+  document.addEventListener(ev, ()=>{ interacted = true; }, { capture:true }));
+setTimeout(()=>{ if(!interacted && current===0) next(); }, 1600);
+
+window.addEventListener("resize", layout);
+layout();
+</script>
+</body>
+</html>
