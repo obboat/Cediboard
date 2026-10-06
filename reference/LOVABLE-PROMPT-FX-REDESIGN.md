@@ -19,13 +19,17 @@ Decisions already made (do not reopen):
 We are rebuilding the three FX pages (USD, GBP, EUR) of Cediboard. This message
 covers data only. Do not change any page design yet.
 
-STEP 0: PROBE BEFORE BUILDING
-From a server function, call each CediRates endpoint below once for USD with a
-browser User-Agent header and show me: HTTP status, the top-level keys, and one
-sample record. If any endpoint fails or the shape differs from what I describe,
-stop and tell me. Do not guess a different shape.
+CEDIRATES API
+These endpoints are already used every morning in our daily production and
+work as described. None of them needs an API key. Every request MUST send a
+normal browser User-Agent header, otherwise the API rejects it as a bot:
 
 User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36
+
+On the first successful fetch, log the HTTP status and one sample record per
+endpoint to the server console, so we can confirm the field names in Lovable.
+If a response does not have the fields described below, write fetch_error and
+keep the previous values. Do not guess a different shape.
 
 1. Today's rates
    GET https://api.cedirates.com/api/v1/rates?baseCurrency={CUR}&limit=500
@@ -45,6 +49,9 @@ User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
    but look it up on every fetch).
    GET https://api.cedirates.com/api/v1/rates/average?baseCurrency={CUR}&quoteCurrency=GHS&isToday=true&subCategory={BANK_ID}
    For a past day replace isToday=true with date=YYYY-MM-DD.
+   The parameter name is `subCategory`, NOT `subCategoryId`. The older
+   subCategoryId parameter is now ignored and silently returns the blended
+   all-channel average.
    Use data.selling ONLY if data.subCategoryName === "Bank". Anything else is the
    blended all-channel average: treat the channel as missing. Never compute our
    own mean of individual banks.
@@ -149,8 +156,8 @@ edition date minus one day. Leave googleRate and bloombergRate empty. If the
 previous edition's date equals the new compareDate, prefill prevGoogle and
 prevBloomberg with its googleRate and bloombergRate.
 
-When done, show me the probe results and the raw stored content for the USD
-page after one "Fetch latest". No design changes yet.
+When done, show me the logged sample records and the raw stored content for
+the USD page after one "Fetch latest". No design changes yet.
 ```
 
 ---
