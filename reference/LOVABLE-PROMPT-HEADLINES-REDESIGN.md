@@ -11,24 +11,42 @@ Attach images:
 
 Decisions already made (do not reopen):
 - The page stays a live React page. Titles, captions and sources are real text;
-  only the six illustrations are AI-generated, one per card.
-- The redesign covers both the visuals and how the six stories are chosen and written.
-- Illustrations are made with OpenAI's image model (the manual production uses ChatGPT).
+  only the illustrations are AI-generated.
+- The editor pastes the six stories in. There is no automatic story picking.
+- Illustrations follow the look of the manual samples (glossy objects, number
+  badge, short labels), not the flat style.
+- All six illustrations are generated as ONE square asset board (the manual
+  production method), then cut into six by code. A single card can be redone
+  on its own, using the board as a style reference.
+- OpenAI image model (the manual production uses ChatGPT).
 - The date sits on its own line in gold under the title, with no dash.
 - The manual samples are 1200 x 1600, exactly 3:4 like the 810 x 1080 page, so
   the layout scales by about 0.675.
 
 ---
 
-## Message 1 of 3: choosing and writing the six stories
+## Message 1 of 3: pasting the six stories and writing them up
 
 ```
 We are rebuilding the "In the Headlines: 6 Major Stories Shaping Ghana Today"
-page (page type "headlines"). This message covers story selection, writing and
-the content schema only. Do not change the page design yet.
+page (page type "headlines"). This message covers how stories get in and how
+they are written. Do not change the page design yet.
 
-GOAL
-Every edition shows six major Ghana stories written in our house style:
+HOW STORIES GET IN
+The editor chooses the six stories; the app never picks them.
+- In the Headlines editor, add a "Paste today's six stories" panel with six
+  numbered inputs. Each input accepts either a link to the article or the
+  pasted article text.
+- For a link, fetch the page server-side and extract the article text. If the
+  fetch fails or returns too little text, show "Couldn't read this link, paste
+  the text instead" on that input. Never write a story from a headline alone.
+- The order of the six inputs is the order on the page (1 to 6).
+- "Write up stories" sends all six to Claude in one call.
+- Remove "headlines" from the automatic fetch types (AUTO_FETCH_TYPES and
+  "Fetch all"), and make Manual the default mode for the Headlines page.
+  Leave the RSS fetcher code in place but unused by this page.
+
+HOUSE STYLE (Claude writes these; the editor can change them)
 - Title: 3 to 6 words, Title Case, at most 45 characters. Lead with the actor
   and the action. Put the key figure in the title when the figure IS the story
   ("Tullow Loses $196.5m Tax Case", "Hohoe Floods Displace 5,140 Residents").
@@ -37,41 +55,30 @@ Every edition shows six major Ghana stories written in our house style:
   person responsible and include the key figure if there is one.
 - No clickbait, no questions, no opinion, no exclamation marks, no em dashes.
 
-SELECTION RULES (Claude does this; an editor approves)
-From the RSS items fetched by fetchHeadlines (src/lib/fetchers/media.server.ts),
-shortlist up to 15 candidates and rank them. Pick the top six that:
-- matter nationally: policy, economy, money, courts, health, security,
-  infrastructure, sport results, disasters;
-- prefer stories with a concrete figure (amount, count, percentage, date);
-- skip anniversaries, congratulations, church/party PR, opinion pieces,
-  celebrity gossip and duplicates of the same event from different outlets;
-- use at most two stories from the same category.
-
 FACT RULES
-- Use only facts present in the RSS item (title + summary). Never invent
-  numbers, names or events.
-- keyFigure must appear verbatim in the item text. After Claude replies,
-  check this in code (normalise spaces and currency symbols); if it does not
-  match, set keyFigure to null and flag the card for the editor.
+- Use only facts in the pasted text. Never invent numbers, names or events.
+- keyFigure must appear verbatim in the pasted text. After Claude replies,
+  check this in code (normalise spaces and currency symbols such as GH₵ / GHS
+  / ¢); if it does not match, set keyFigure to null and flag the card.
 
 CLAUDE CALL
 Keep the existing ANTHROPIC_API_KEY secret. Use the official
 @anthropic-ai/sdk package rather than raw fetch, model "claude-opus-5-5".
 Use structured outputs (output_config.format with a JSON schema) instead of
 "reply with JSON only". Set output_config.effort to "medium". Check
-stop_reason before reading content; on "refusal" or a failed call, keep the
-previous stories and write fetch_error. Follow the current Anthropic API docs
-for exact parameter shapes.
+stop_reason before reading content; on "refusal" or a failed call, keep what
+the editor already has and show the error. Follow the current Anthropic API
+docs for exact parameter shapes.
 
-Schema Claude must return, per story:
+Per story, Claude returns:
 {
-  "n": number,                        // index in the shortlist
-  "title": string,                    // rules above
-  "body": string,                     // the caption, rules above
+  "n": 1..6,                          // matches the input number
+  "title": string,
+  "body": string,                     // the caption
   "category": one of the CATEGORY ids below,
   "keyFigure": string | null,         // verbatim, e.g. "GH₵6.2bn", "610 rounds", "4.6%"
-  "sourceInstitution": string,        // who the facts come from, e.g. "GRA Customs Division", "ISSER, University of Ghana"
-  "brief": string                     // 1 to 2 sentences for the illustrator: hero object, 2 to 3 props, one Ghana cue
+  "sourceInstitution": string,        // who the facts come from, e.g. "GRA Customs Division"
+  "brief": string                     // illustration brief: hero object, 2 to 3 props, one Ghana cue, 1 to 2 sentences
 }
 
 CATEGORY ids:
@@ -81,18 +88,18 @@ technology, agriculture
 
 CONTENT SCHEMA (src/lib/edition-content.ts, HeadlinesContent.stories[])
 Add these optional fields (older editions without them must still render):
-category?: string; keyFigure?: string | null; sourceInstitution?: string;
+sourceText?: string; sourceUrl?: string; category?: string;
+keyFigure?: string | null; sourceInstitution?: string;
 imageStatus?: "none" | "generating" | "ready" | "approved" | "failed";
 imageModel?: string; approved?: boolean.
-Keep srcName and link (the outlet and URL) for the editor's reference only;
-they are not shown on the page.
+Also add boardImage?: string on HeadlinesContent (the uncut board, kept for
+re-cuts and single-card regeneration).
 
 The page's source line becomes:
 "Sources: " + the unique sourceInstitution values joined with " · ".
-The outlets (MyJoyOnline, Citi, 3News, GNA) are no longer listed on the page.
 
-When done, run one fetch and show me the six drafted stories as JSON, with
-the key-figure check result for each. No design changes yet.
+When done, paste six test stories, run "Write up stories" and show me the six
+results as JSON with the key-figure check for each. No design changes yet.
 ```
 
 ---
@@ -119,7 +126,8 @@ LAYOUT, top to bottom (content width 714 px, 48 px side padding)
    - Edition date on its own line in gold #c8960c, 24 px, 800, with an
      ordinal day: "6th October 2026". No dash before it.
    - 3 px ink rule under it, full content width, 12 px below the date.
-2. Story grid (14 px below the rule): 2 columns x 3 rows, 12 px gaps.
+2. Story grid (14 px below the rule): 2 columns x 3 rows, 12 px gaps, in the
+   order 1 2 / 3 4 / 5 6.
    Cards: white #ffffff, radius 14 px, soft shadow
    (0 2px 10px rgba(26,24,20,.06)), no border, 12 px padding.
    Card height is fixed so all six are equal (about 245 px; tune so the page
@@ -130,7 +138,7 @@ LAYOUT, top to bottom (content width 714 px, 48 px side padding)
         lucide-react icon 22 px, soft shadow (0 2px 6px rgba(0,0,0,.15)).
       - Title: 17 px, 800, ink, line-height 1.15, max 2 lines, vertically
         centred against the tile.
-   b. Illustration: full card width, about 120 px tall, object-fit cover,
+   b. Illustration: full card width, about 120 px tall, object-fit contain,
       centred, on white (no grey box, no border, no radius on the image).
    c. Caption: 12 px, ink #1a1814 at 85%, line-height 1.4, max 3 lines.
       It must never be cut off with "...": the writing rules in Message 1
@@ -174,82 +182,140 @@ Show me a screenshot of today's draft at 810 x 1080.
 
 ---
 
-## Message 3 of 3: illustrations, newsroom editor and publish guard
+## Message 3 of 3: the illustration board, cutting, editor and publish guard
 
 ```
-Now upgrade the per-card illustrations and the Headlines editor. The attached
-images are the STYLE reference for the illustrations: match their look,
-richness and density.
+Now build the illustrations. We generate all six as ONE square asset board,
+then cut it into six images in code. One generation keeps the style
+consistent across the six. The attached images are the STYLE reference for
+the illustrations: match their look, richness and density.
 
 IMAGE MODEL
-Our manual production uses OpenAI (ChatGPT) for these illustrations, so
-generate with OpenAI's image model:
+Our manual production uses OpenAI (ChatGPT), so generate with OpenAI:
 - Add an OPENAI_API_KEY backend secret (ask me for it).
 - First check whether the Lovable AI gateway offers an OpenAI image model; if
   it does, use it through the gateway. If not, call the OpenAI Images API
   directly from the server route (src/routes/api/illustration.ts) with the
   newest OpenAI image model available to the key.
-- Landscape 1536 x 1024 output.
-- For cards with an attached real photo (the existing personImage flow), use
-  OpenAI's image edit endpoint with that photo as the input image.
+- Square output at the largest size the model offers (each card shows one
+  sixth of the board enlarged, so resolution matters).
 - Keep Gemini (google/gemini-3-pro-image) as a fallback, chosen by a
   newsroom setting "Illustration model: OpenAI | Gemini" (default OpenAI).
   Record imageModel on each story.
 
-STYLE RULES (update src/lib/illustration-style.ts)
-Keep the existing rules (glossy editorial vector with soft 3D volume, one
-hero object, 2 to 3 props, number badge, category icon, max two short
-labels, Ghana anchoring, people rules, no real likeness) with these changes:
-1. BACKGROUND: replace the "pure flat white, knocked out to transparency"
-   rule. Draw a light, bright scene behind the objects (sea and port,
-   stadium, road and city, sky, fields) that fades softly to pure white at
-   all four edges, like the samples. Stop running transparent-png.ts on
-   these images; the card is white, so the fade blends in.
-2. FRAMING: the image is shown cropped to about 1.9:1, so keep the hero,
-   badge and labels inside the middle 80% of the height. Nothing important
-   in the top or bottom 10%.
-3. NUMBER BADGE: use keyFigure from the story (never invent one). Default
-   badge: rounded rectangle in bright blue #1F5FD1 with heavy white text.
-   Money penalties, losses and price rises may use a red tag (#D93A2B).
-   Write the figure exactly as given ("GH₵6.2bn", "610 ROUNDS", "$196.5M").
-4. WEAPONS: seized weapons may appear only as inert evidence (in a crate, on
-   a table, beside a customs box). Never held, pointed or fired; no blood,
-   no injured people.
-5. Pass the caption, category, keyFigure and brief into the prompt.
+BOARD PROMPT
+Replace buildIllustrationPrompt in src/lib/illustration-style.ts with a board
+prompt built from the six stories (n, title, caption, category, keyFigure,
+brief). Use this text, filling the six briefs at the end:
 
-GENERATION FLOW
-- "Generate illustrations" in the editor runs all six, two at a time, and
-  shows each card's status (generating, ready, failed).
-- Each card has "Regenerate", "Upload my own image" (existing ImageUploader)
-  and "Approve". Editing the brief and regenerating keeps the previous image
-  until the new one is ready.
-- Store images in the existing private bucket behind the image proxy.
+  Create a premium editorial illustration asset board for a news
+  publication, "Ghana in Numbers" by Finex Insights. The output should feel
+  like artwork commissioned for a high-end editorial newsroom.
 
-NEWSROOM EDITOR (Headlines, Manual mode composer)
-For each of the six cards, show and allow editing of:
+  CANVAS: square, background pure white #FFFFFF, minimalist composition,
+  plenty of negative space.
+
+  LAYOUT: six illustrations in a perfectly aligned 2-column x 3-row grid,
+  in reading order: 1 2 / 3 4 / 5 6. Each illustration sits centred in its
+  own section. No cards, no borders, no boxes, no frames, no grid lines,
+  no section numbers. The illustrations float on the white page with
+  perfectly even spacing.
+
+  SIZE: each illustration spans about 60% of its section's width and about
+  30% of its area, centred, with generous white space all round. Do not zoom
+  in, do not crop, and never let an illustration touch another section or
+  the canvas edge.
+
+  STYLE: modern editorial vector illustration with soft 3D volume: smooth
+  gradients, glossy highlights, rounded forms and small soft shadows attached
+  under objects. Bright, saturated, friendly palette: blue for institutions,
+  government and number badges; red for warnings, penalties and declines;
+  green for agriculture, transport and growth; gold for gavels, money and
+  finance; warm tan for paper, cement and case files. No photorealism, no
+  sketch lines, no dark or moody lighting. All six share one consistent
+  style and scale.
+
+  SCENE: each illustration is one self-contained vignette: one hero object,
+  two or three supporting props, and at most one Ghana cue (Ghana flag, Bank
+  of Ghana tower, Accra skyline, kente, the cedi symbol GH₵). A light scenery
+  hint (sea and port, stadium, road, sky) may sit behind the objects but must
+  fade to pure white within the illustration's own area.
+
+  NUMBER BADGE: when a story has a key figure, show exactly that figure as a
+  badge: a rounded blue (#1F5FD1) rectangle with heavy white text, or a red
+  (#D93A2B) tag for penalties, losses and price rises. Write it exactly as
+  given. If a story has no key figure, no badge. Never invent a number.
+
+  LABELS: at most two short uppercase labels per illustration on objects
+  (e.g. CUSTOMS, EOCO, FULL), one to three words, only where they aid
+  recognition. No headlines, captions, sentences, dates or source lines
+  anywhere on the board.
+
+  PEOPLE: no real person's likeness. A named public figure becomes a
+  generic, respectful Ghanaian figure in that role. Accused people are never
+  shown; use a gavel, courthouse or case file instead. Hands (a handshake,
+  a hand holding a phone) are fine.
+
+  WEAPONS: seized weapons only as inert evidence in a crate or on a table.
+  Never held, pointed or fired; no blood, no injured people.
+
+  QUALITY CHECK before rendering: every illustration is smaller than its
+  section with large white space around it; perfectly aligned grid;
+  consistent style and scale; each illustration understood instantly;
+  every badge figure matches the brief exactly.
+
+  ILLUSTRATION BRIEFS
+  1. {title}. {caption} Key figure: {keyFigure or "none"}. Brief: {brief}
+  2. ...
+  (through 6)
+
+CUTTING THE BOARD (server-side, deterministic)
+1. Save the full board as boardImage.
+2. Divide the board into an exact 2 x 3 grid of equal sections.
+3. In each section, find the bounding box of non-white pixels (any channel
+   below 245), ignoring a 2% strip at the section's edges.
+4. Pad the box by 8% on every side, crop, and save as that story's img.
+5. Flag the card for regeneration if the box touches the section edge (the
+   illustration spilled over), covers under 4% of the section (empty), or
+   the section contains two separate large shapes (two illustrations).
+
+REGENERATING ONE CARD
+"Regenerate" on a single card makes one new illustration (not a new board):
+send the board image as a reference with the instruction "Draw a new
+illustration for this story in exactly the same style, palette and scale as
+the attached board", plus that story's brief and key figure. Output a
+landscape image on pure white; trim it with the same bounding-box rule.
+For a card with an attached real photo (the existing personImage flow), use
+OpenAI's image edit endpoint with the photo as an input image.
+
+NEWSROOM EDITOR (Headlines)
+Under the "Paste today's six stories" panel from Message 1, show the six
+cards. For each card:
 | Field                | Control                          | Rule |
 | Title                | text, live counter (max 45)      | 3 to 6 words |
 | Caption              | textarea, live counter (max 160) | one sentence |
 | Category             | dropdown of the 17 categories    | sets icon and colour |
-| Key figure           | text                             | shows a warning if not found in the source item |
+| Key figure           | text                             | warning if not found in the pasted text |
 | Source institution   | text                             | feeds the Sources line |
 | Illustration brief   | textarea                         | used for generation |
 | Illustration         | preview + Regenerate / Upload / Approve | |
-| Outlet + link        | read-only                        | editor reference |
-Plus "Swap story": replace a card with another shortlisted candidate.
+| Source text / link   | read-only, collapsible           | what the editor pasted |
+Buttons above the cards: "Generate board" (all six, one image) and "View
+board" (shows the uncut board with the cut lines drawn on it).
 
 TODAY'S DESK AND PUBLISH GUARD
 Publish stays blocked while the visible Headlines page has: fewer than six
 stories, a title or caption over its limit, a caption that overflows three
 lines, a card without an approved image, or an unresolved key-figure
-warning. Add matching Today's Desk items ("Headlines: approve 4
-illustrations", "Headlines: caption 3 is too long").
+warning. Add matching Today's Desk items ("Headlines: paste today's six
+stories", "Headlines: approve 4 illustrations", "Headlines: caption 3 is
+too long").
 
 QA
-- Generate a full set for today and show me the page next to one attached
-  sample at the same size.
+- Generate a board for today, show me the uncut board with cut lines, then
+  the finished page next to one attached sample at the same size.
 - No em dashes in any title, caption or Sources line.
-- Every number on the page appears in its source RSS item or was typed by
-  the editor.
+- Every number on the page appears in the pasted text or was typed by the
+  editor.
 - Regenerate the Headlines share thumbnail after the redesign.
 ```
