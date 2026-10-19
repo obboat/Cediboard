@@ -12,9 +12,13 @@ Decisions already made (do not reopen):
 - CediRates is the base source for every OMC price. No routine typing.
 - Show every OMC that CediRates lists, sorted by petrol price.
 - Products: petrol and diesel (per litre).
-- The app flags only OMCs whose CediRates price looks stale for the current
-  pricing window. An editor can override a single price; the override clears
-  itself as soon as CediRates shows a newer update for that OMC.
+- The app flags only OMCs whose CediRates price looks stale: any OMC priced
+  below the current NPA floor, plus a short core list (GOIL, Star Oil, Shell,
+  TotalEnergies) when unchanged 24 hours into a window. An editor can
+  override a single price; the override clears itself as soon as CediRates
+  shows a newer update for that OMC.
+- The CediRates fuel endpoint was found by Lovable on 19 Oct 2026 and is
+  filled into Message 1.
 
 ---
 
@@ -32,7 +36,18 @@ apply here: no API key; every request sends a normal browser User-Agent
 header, otherwise the API rejects it as a bot:
 User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36
 
-FUEL ENDPOINT: (unknown; if empty, run STEP 0)
+FUEL ENDPOINT (found and confirmed):
+GET https://api.cedirates.com/api/v1/prices?isToday=true
+Response: { success, data: [...], datetime, pagination }. One record per
+OMC: company.companyName (display), company.uniqueId and companyId (stable
+IDs, match OMCs over time by company.uniqueId), petrol and diesel (GH₵ per
+litre), lastUpdatedAt (the OMC's last price change). date, createdAt and
+updatedAt are CediRates' daily copy times: never use them as freshness.
+Ignore "premium".
+Fallback: if the main call fails twice, try once
+GET https://api.cedirates.com/api/v1/fuelPrices/<d-M-yyyy> (Accra date) and
+accept it only if its records have the same fields. Record which endpoint
+supplied the data (fetchedFrom).
 
 STEP 0: FIND THE ENDPOINT (only if FUEL ENDPOINT above is empty)
 The FX endpoints live under https://api.cedirates.com/api/v1/. Find the
@@ -62,12 +77,18 @@ of each month (Africa/Accra time). windowStart = the most recent 1st or 16th
 on or before today.
 
 STALENESS (decides what the editor is asked to check)
-An OMC row is "stale" when its CediRates last-updated time is before
-windowStart AND at least 24 hours have passed since windowStart (OMCs often
-take a day to announce). Outside that rule a row is "fresh".
+lastUpdatedAt is the OMC's last price CHANGE, so an old date alone does not
+mean CediRates is out of date. A row is "stale" (needs a look) when EITHER
+a) the NPA floor for the current window is known AND the row's petrol is
+   below floorPetrol or its diesel is below floorDiesel; OR
+b) the OMC is on the CORE list AND lastUpdatedAt is before windowStart AND
+   at least 24 hours have passed since windowStart.
+CORE list: a newsroom setting, default GOIL, Star Oil, Shell, TotalEnergies,
+matched by company.uniqueId. Store the reason ("below floor" / "core
+unchanged") with the flag.
 Stale is a prompt for the editor, not an error: the row still shows its
-latest CediRates price, and the public page marks it "unchanged since
-<date>" (see Message 2).
+latest CediRates price. Every row whose lastUpdatedAt is before windowStart
+shows "unchanged since <date>" on the public page (see Message 2).
 
 HISTORY AND DELTAS
 Create a table fuel_price_snapshots (omc text, day date, petrol numeric,
@@ -148,8 +169,8 @@ LAYOUT, top to bottom (content width 714 px)
      gold tick on each bar track at the floor value.
    - The cheapest petrol and cheapest diesel values are emerald and bold.
    - Status column, 11 px muted:
-     fresh CediRates row: "as of 17 Oct";
-     stale row: "unchanged since 2 Oct";
+     changed this window (lastUpdatedAt on or after windowStart): "as of 17 Oct";
+     not changed this window: "unchanged since 2 Oct";
      overridden row: "✎ 17 Oct" (newsroom-updated);
      confirmed row: "checked 17 Oct".
    - Row height adapts so up to 14 OMCs fit in one column. With 15 to 28
@@ -201,7 +222,10 @@ EDITOR LAYOUT
    buttons on every row and a "Remove override" link on overridden rows.
 4. NPA floor panel: floorPetrol and floorDiesel inputs for the current
    window, prefilled from the last window and marked "last window" until
-   the editor saves them. Optional; the page hides the floor when unknown.
+   the editor saves them. The page hides the floor when unknown, and the
+   "below floor" staleness check only runs once it is entered.
+5. Core list setting: the OMCs checked when unchanged after a window opens
+   (default GOIL, Star Oil, Shell, TotalEnergies).
 
 OVERRIDE BEHAVIOUR
 - An override replaces only the product(s) the editor typed.
@@ -213,9 +237,10 @@ OVERRIDE BEHAVIOUR
   in a fuel_overrides table, staff-readable only.
 
 TODAY'S DESK
-Add one item only when there is something to do:
-"Fuel: 3 OMCs unchanged since the 16 Oct window opened" (links to the
-"Needs a look" list). Nothing appears on days with no stale rows.
+Add items only when there is something to do:
+"Fuel: enter the NPA floor for the 16 Oct window" (until it is entered);
+"Fuel: 2 OMCs to check" (links to the "Needs a look" list, with each
+reason). Nothing appears on days with no stale rows.
 
 PUBLISH GUARD
 Publish is NOT blocked by stale rows (they show honestly as "unchanged
