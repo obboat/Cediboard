@@ -137,66 +137,84 @@ When done, show me the raw stored content for the Fuel page after one
 
 ---
 
-## Message 2 of 3: the page design (810 x 1080)
+## Message 2 of 3 (revised 22 Oct 2026): the price ladder (810 x 1080)
+
+The first version of this message produced a full table (prices, change chips,
+bars and a status column for all 18 OMCs). It was too detailed, so this
+replaces it. Paste this to Lovable as a redesign of the page it already built.
 
 ```
-Now redesign the Fuel page component
-(src/components/cediboard/pages/Fuel.tsx) for content.v === 2. Keep the old
-renderer for older editions. Keep the shared PageHeader and PageFooter, the
-existing tokens, Google Sans Flex and 48 px side padding. Do not touch the
-Book flip engine or page size. Remove the hard-coded SAMPLE badge; show
-SAMPLE only when content.sample is true.
+The Fuel page is too detailed: about 100 data points, bars that all look the
+same (every price sits between GH₵16 and GH₵19), "new" chips on every row,
+and an "unchanged since" status on almost every row. Redesign it around one
+idea: who is cheapest, who is dearest, and how far apart they are. Keep the
+data layer, editor and stale logic exactly as they are; this changes only
+src/components/cediboard/pages/Fuel.tsx (content.v === 2). Keep the old
+renderer for older editions, the shared PageHeader and PageFooter, the
+existing tokens, Google Sans Flex and 48 px side padding.
+
+"Price shown" below always means fuelShown(row, product) (override first,
+then CediRates).
 
 LAYOUT, top to bottom (content width 714 px)
 1. PageHeader eyebrow: "FUEL <b>BOARD</b>".
 2. Title block:
    - "WHAT A LITRE COSTS TODAY", 34 px, 700.
-   - Subtitle 15 px muted: "Pump prices by OMC, GH₵ per litre · pricing
-     window from {16 Oct 2026}".
-   - Legend, 12.5 px: coral ▲ up since last window, emerald ▼ down,
-     gold ● no change.
-3. Glance row: four stat tiles, equal width:
-   CHEAPEST PETROL (value + OMC), CHEAPEST DIESEL (value + OMC),
-   AVERAGE PETROL (simple mean of shown OMCs, labelled "simple average"),
-   NPA FLOOR PETROL (value, or hide this tile when the floor is unknown and
-   show AVERAGE DIESEL instead).
-4. Ranked table, sorted by petrol price low to high (OMCs without a petrol
-   price go last). Columns:
-   OMC | Petrol: value, delta chip, 5 px bar | Diesel: value, delta chip,
-   5 px bar | Status.
-   - Bars use fixed ceilings, never the largest value: GH₵22.00 for both
-     products, minimum width 4%. When the NPA floor is known, draw a thin
-     gold tick on each bar track at the floor value.
-   - The cheapest petrol and cheapest diesel values are emerald and bold.
-   - Status column, 11 px muted:
-     changed this window (lastUpdatedAt on or after windowStart): "as of 17 Oct";
-     not changed this window: "unchanged since 2 Oct";
-     overridden row: "✎ 17 Oct" (newsroom-updated);
-     confirmed row: "checked 17 Oct".
-   - Row height adapts so up to 14 OMCs fit in one column. With 15 to 28
-     OMCs, switch to two side-by-side columns with the same columns in
-     compact form. With more than 28, show the 28 most recently updated
-     and say "{n} more on CediRates" in the note line.
-5. Note line, 13 px muted, max 2 lines: what the deltas compare against;
-   "✎ Prices updated by the newsroom from the OMC's own announcement" when
-   any override is shown; "Average is a simple mean, not volume-weighted".
-6. PageFooter source: "Source: CediRates (OMC pump prices); NPA (price
-   floor); Finex Insights newsroom where marked ✎ · window from {date}."
+   - Subtitle 15 px muted: "Petrol pump prices by OMC, GH₵ per litre ·
+     {22 Oct 2026}".
+3. Hero (one big idea), left-aligned:
+   - Label 13 px uppercase muted: "CHEAPEST PETROL".
+   - "₵16.00" (₵ 34 px, value 80 px, 700, gold) and the OMC name beside it,
+     24 px bold ("Benab"). If two or more OMCs tie, name them all.
+   - One sentence, 17 px: "₵1.75 a litre separates the cheapest and dearest
+     petrol. Filling a 40-litre tank costs ₵70.00 more at MISA Energy than
+     at Benab." (computed: gap = dearest minus cheapest; tank = gap x 40).
+4. Petrol ladder (the chart), 16 px below the hero:
+   - A dot plot, one row per OMC with a petrol price, sorted cheapest at
+     the top. OMC name on the left (14 px; 15 px bold for the CORE list:
+     GOIL, Star Oil, Shell, TotalEnergies), a horizontal track, one dot per
+     row, and the price as a 12 px label just right of the dot.
+   - Axis: a declared range, not scaled to the data silently. Start at the
+     cheapest price rounded DOWN to the nearest 0.50 and end at the dearest
+     rounded UP to the nearest 0.50 (today 16.00 to 18.00). Gridlines and
+     labels every 0.50 along the top. Write "Axis starts at ₵16.00, not
+     zero" in 11 px muted at the axis start.
+   - Dot colours: cheapest emerald, dearest coral, all others ink. Dot
+     12 px. No bars.
+   - When the NPA floor for the current window is known, draw a dashed gold
+     vertical line at floorPetrol across all rows, labelled "NPA floor
+     ₵16.45" at the top.
+   - Row height: 28 px, shrinking to no less than 22 px so up to 26 OMCs
+     fit. With more than 26, show the 26 cheapest and say "{n} dearer OMCs
+     not shown" in the note line.
+   - Change since last window: only when a previous-window price exists AND
+     differs, add a small arrow after the price label (coral ▲ up, emerald
+     ▼ down). Show nothing otherwise: no "new", no gold dot.
+   - Overridden rows: a small ✎ after the OMC name. Nothing else per row.
+5. Diesel line, one line, 15 px: "Diesel: cheapest {So Energy} ₵17.55 ·
+   dearest {MISA Energy} ₵18.99 · average ₵18.34". Names bold.
+6. Note line, 13 px muted, max 2 lines:
+   "{15} of {18} OMCs have not changed their price since the pricing window
+   opened on {16 Oct}." (rows whose lastUpdatedAt is before windowStart),
+   plus "✎ updated by the newsroom from the OMC's own announcement" when any
+   override is shown. Average is a simple mean, not volume-weighted.
+7. PageFooter source: "Source: CediRates (OMC pump prices); NPA (price
+   floor); Finex Insights newsroom where marked ✎ · {22 Oct 2026}."
 
-DELTA RULES
-delta = current minus previous-window price. > 0 coral ▲ (dearer),
-< 0 emerald ▼ (cheaper), = 0 gold ●. Show the delta to 2 decimals.
+REMOVE from the page: the four stat tiles, the table, all bars, the
+per-row diesel column, the status column and every "new" chip. The editor
+keeps all of this detail.
 
 No em dashes anywhere on the page.
 
 QA (check before saying you are done)
 - Fits 810 x 1080 (scrollHeight equals clientHeight, footer fully inside)
-  with 6, 14, 15 and 28 OMCs, in single and spread mode.
-- Every value on one line; no clipped OMC names (shorten with a title
-  attribute only if longer than 18 characters).
-- Bars use the fixed GH₵22.00 ceiling.
+  with 6, 18 and 26 OMCs, in single and spread mode.
+- No price label overlaps a dot, the floor line label, or another label.
+- The axis range is declared on the page and every dot sits inside it.
+- The hero numbers match the chart (cheapest and dearest dots).
 - Older editions still render their old Fuel page.
-Show me screenshots with today's real data.
+Show me a full-size screenshot with today's real data.
 ```
 
 ---
