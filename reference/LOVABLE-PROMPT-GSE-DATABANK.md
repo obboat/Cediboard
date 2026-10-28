@@ -8,62 +8,55 @@ Decisions already made (do not reopen):
 - Source: the Databank Research "Ghana: Daily Market Recap" PDF, emailed daily
   after the close by research@databankgroup.com. Finex Insights has an
   agreement with Databank to republish these figures with credit.
-- Intake: auto-forward from Gmail to an app inbound address (A), with a manual
-  PDF upload in the newsroom as backup (B).
+- Intake: the editor uploads the PDFs in the newsroom (no email service, no
+  Gmail connection). Automatic forwarding can be added later with a Google
+  Apps Script that pushes the PDFs to the same upload path.
 - The Recap feeds the GSE page AND Macro Watch (T-bill rates and inflation).
 - The Return Analysis Sheet (the second daily PDF) is stored but not used yet.
 
 ---
 
-## Message 1 of 3: getting the PDF into the app
+## Message 1 of 3 (upload only, revised 28 Oct 2026): getting the PDF into the app
+
+If Lovable has already started on inbound email or Gmail access, this message
+tells it to remove that.
 
 ```
 We are rebuilding the GSE Scoreboard (page type "gse") on a new source: the
-Databank Research "Ghana: Daily Market Recap" PDF. Databank emails it every
-trading day after the close from research@databankgroup.com. Finex Insights
-has an agreement with Databank to republish its figures with the credit
-"Source: Databank Research". This message covers intake only.
+Databank Research "Ghana: Daily Market Recap" PDF, which Databank emails to
+me every trading day after the close. Finex Insights has an agreement with
+Databank to republish its figures with the credit "Source: Databank
+Research". This message covers intake only.
 
-INTAKE A: INBOUND EMAIL (primary)
-- Set up an inbound email address for the app through an inbound-email
-  service that posts to a webhook (Postmark or Mailgun inbound, or whatever
-  Lovable supports best). Put a long random token in the address
-  (e.g. recap-<token>@...) and verify the provider's webhook signature.
-- The webhook (server-side) accepts a message only when the original sender
-  is research@databankgroup.com (check From and, for forwarded mail, the
-  original-sender headers). Everything else is dropped and logged.
-- Save every PDF attachment to a private storage bucket "market-reports".
-  Classify by file name:
-  "Ghana_Daily_Market_Review*.pdf" or "*Daily Market*" = recap;
-  "*Return_Analysis*" = return-sheet; anything else = other.
-- GMAIL CONFIRMATION: when I add the forwarding address in Gmail, Google
-  sends a confirmation email with a code to that address. Accept mail from
-  forwarding-noreply@google.com too, and show its subject and body in the
-  newsroom ("Intake" panel) so I can confirm forwarding. Do not process it
-  further.
-
-INTAKE B: MANUAL UPLOAD (backup)
-- In the GSE editor, add "Upload Databank PDF". Same classification and
-  storage as above.
+INTAKE: MANUAL UPLOAD ONLY
+- No inbound email service, no Mailgun or Postmark, and no Gmail
+  connection. The app must never read my mailbox. If any of this was
+  started, remove it, including any stored Gmail tokens or connector.
+- In the GSE editor, add an "Upload Databank PDFs" drop zone that accepts
+  one or more PDFs at once (I will usually drop both daily files together).
+- Save each file to a private storage bucket "market-reports". Classify by
+  file name: "Ghana_Daily_Market_Review*" or "*Daily Market*" = recap;
+  "*Return_Analysis*" = return-sheet; anything else = other (stored, not
+  processed).
+- Extraction (Message 2) starts automatically right after upload.
 
 STORAGE
-Create a table market_reports (id uuid, received_at timestamptz,
-via text ('email'|'upload'), kind text ('recap'|'return-sheet'|'other'),
-file_path text, report_date date null, status text
+Create a table market_reports (id uuid, uploaded_at timestamptz,
+uploaded_by uuid, kind text ('recap'|'return-sheet'|'other'), file_path
+text, report_date date null, status text
 ('received'|'extracted'|'checks_failed'|'error'), extracted jsonb null,
 checks jsonb null, error text null). Unique on (kind, report_date) once
-report_date is known; a second copy of the same day's recap replaces the
-first only if the first is not yet extracted.
+report_date is known: uploading the same day's recap again asks "Replace
+the {27 Oct} recap?" before overwriting.
 Add a migration in supabase/migrations: RLS on, staff-only read/write via
-public.is_staff(auth.uid()), all to service_role (the webhook), no anon
-access. Same rules for the storage bucket. Show me the policies.
+public.is_staff(auth.uid()), all to service_role, no anon access. Same rules
+for the storage bucket. Show me the policies.
 
-NEWSROOM "INTAKE" PANEL (in the GSE editor)
-List the last 10 received items: time, via, kind, report date, status, and
-a link to open the PDF.
+NEWSROOM "INTAKE" PANEL (in the GSE editor, under the drop zone)
+List the last 10 uploads: time, who, kind, report date, status, and a link
+to open the PDF.
 
-When done, give me the inbound address. I will set up the Gmail forward
-and send one test email. Do not extract anything yet.
+When done, I will upload one recap as a test. Do not extract anything yet.
 ```
 
 ---
@@ -79,7 +72,7 @@ dividends, upcoming events, an Africa markets table, contacts and
 disclaimers.
 
 EXTRACTION
-- Server-side, when a recap is stored (email or upload), send page 1 of the
+- Server-side, when a recap is uploaded, send page 1 of the
   PDF to Claude with the existing ANTHROPIC_API_KEY. Use the official
   @anthropic-ai/sdk, model "claude-opus-5-5", the PDF as a document content
   block, and structured outputs (output_config.format with a JSON schema).
@@ -212,9 +205,9 @@ extracted value editable (edits are logged); "Use anyway" for a recap with
 failed checks; regenerate story.
 
 TODAY'S DESK (only when something needs doing)
-- "GSE: no Databank recap for {Tue 27 Oct}" from 07:00 Accra on a weekday
-  after a trading day, if none arrived (ignore public holidays: if the GSE
-  did not trade, Databank sends nothing).
+- "GSE: upload the Databank recap for {Tue 27 Oct}" from 07:00 Accra on a
+  weekday after a trading day, if none has been uploaded (on public
+  holidays the GSE does not trade and there is no recap).
 - "GSE: recap of {27 Oct} failed {n} checks".
 - "Macro: policy rate changed in the recap, please confirm".
 
